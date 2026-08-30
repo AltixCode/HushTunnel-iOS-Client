@@ -7,10 +7,8 @@ import SwiftUI
 struct Application: App {
     @UIApplicationDelegateAdaptor private var appDelegate: ApplicationDelegate
     @StateObject private var environments = ExtensionEnvironments()
-    @StateObject private var peerStore = TailscaleSSHPeerStore()
-    @StateObject private var tailscaleViewModel = TailscaleStatusViewModel()
-    @StateObject private var taildropSendManager = TaildropSendManager()
-    @StateObject private var taildropInbox = TaildropInboxViewModel()
+    @StateObject private var authStore = AuthStore.shared
+    @StateObject private var langManager = LanguageManager.shared
 
     init() {
         Task { @MainActor in
@@ -20,13 +18,10 @@ struct Application: App {
 
     var body: some Scene {
         WindowGroup {
-            MainView()
-                .tailscaleStatusSubscription(tailscaleViewModel, environments: environments, peerStore: peerStore)
+            RootView()
                 .environmentObject(environments)
-                .environmentObject(peerStore)
-                .environmentObject(tailscaleViewModel)
-                .environmentObject(taildropSendManager)
-                .environmentObject(taildropInbox)
+                .environmentObject(authStore)
+                .environmentObject(langManager)
         }
     }
 }
