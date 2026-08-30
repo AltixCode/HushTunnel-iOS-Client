@@ -1,6 +1,10 @@
 import Foundation
 
-public final class ApiClient {
+public struct SimpleSuccessResponse: Codable, Sendable {
+    public let success: Bool?
+}
+
+public final class ApiClient: Sendable {
     public static let shared = ApiClient()
 
     private let session: URLSession
@@ -27,8 +31,9 @@ public final class ApiClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        if let token = token ?? AuthStore.shared.token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let tokenToUse = token ?? UserDefaults.standard.string(forKey: "com.shadowlink.auth.token")
+        if let tokenToUse = tokenToUse, !tokenToUse.isEmpty {
+            request.setValue("Bearer \(tokenToUse)", forHTTPHeaderField: "Authorization")
         }
 
         if let body = body {
@@ -159,7 +164,7 @@ public final class ApiClient {
 
     public func deleteResellerCustomer(id: String) async throws {
         let request = try makeRequest(path: "/api/mobile/reseller/customers/\(id)", method: "DELETE")
-        let _: [String: Bool] = try await perform(request)
+        let _: SimpleSuccessResponse = try await perform(request)
     }
 
     public func resellerOrders() async throws -> [ResellerOrder] {
@@ -194,27 +199,27 @@ public final class ApiClient {
 
     public func extendResellerSubscription(id: String, days: Int) async throws {
         let request = try makeRequest(path: "/api/mobile/reseller/subscriptions/\(id)/extend", method: "POST", body: ["days": days])
-        let _: [String: AnyCodable] = try await perform(request)
+        let _: SimpleSuccessResponse = try await perform(request)
     }
 
     public func toggleResellerSubscription(id: String, enable: Bool) async throws {
         let request = try makeRequest(path: "/api/mobile/reseller/subscriptions/\(id)/toggle", method: "POST", body: ["enable": enable])
-        let _: [String: AnyCodable] = try await perform(request)
+        let _: SimpleSuccessResponse = try await perform(request)
     }
 
     public func resetResellerSubscriptionUuid(id: String) async throws {
         let request = try makeRequest(path: "/api/mobile/reseller/subscriptions/\(id)/reset-uuid", method: "POST")
-        let _: [String: Bool] = try await perform(request)
+        let _: SimpleSuccessResponse = try await perform(request)
     }
 
     public func resetResellerSubscriptionTraffic(id: String) async throws {
         let request = try makeRequest(path: "/api/mobile/reseller/subscriptions/\(id)/reset-traffic", method: "POST")
-        let _: [String: Bool] = try await perform(request)
+        let _: SimpleSuccessResponse = try await perform(request)
     }
 
     public func revokeResellerSubscription(id: String) async throws {
         let request = try makeRequest(path: "/api/mobile/reseller/subscriptions/\(id)/revoke", method: "POST")
-        let _: [String: Bool] = try await perform(request)
+        let _: SimpleSuccessResponse = try await perform(request)
     }
 
     public func resellerDeposits() async throws -> [ResellerDeposit] {
@@ -232,5 +237,3 @@ public final class ApiClient {
         return try await perform(request)
     }
 }
-
-public struct AnyCodable: Codable {}

@@ -183,7 +183,7 @@ public struct UserHomeView: View {
                 }
             }
             .confirmationDialog(lang.tr("common.language"), isPresented: $showLanguagePicker, titleVisibility: .visible) {
-                ForEach(AppLanguage.allCases) { l in
+                ForEach(ShadowLinkLanguage.allCases) { l in
                     Button(l.displayName) {
                         lang.setLanguage(l)
                     }
@@ -276,8 +276,8 @@ public struct SubscriptionCardView: View {
             }
 
             // Usage Bar
-            if sub.totalBytes > 0 {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4) {
+                if sub.totalBytes > 0 {
                     let pct = min(1.0, Double(sub.usedBytes) / Double(sub.totalBytes))
                     ProgressView(value: pct)
                         .tint(pct > 0.9 ? .red : .accentColor)
@@ -290,6 +290,17 @@ public struct SubscriptionCardView: View {
                         Text("\(Int(pct * 100))%")
                             .font(.caption2)
                             .foregroundColor(.secondary)
+                    }
+                } else {
+                    HStack {
+                        Text("\(lang.tr("vpn.trafficUsed")): \(formatBytes(sub.usedBytes))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("Unlimited")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.green)
                     }
                 }
             }

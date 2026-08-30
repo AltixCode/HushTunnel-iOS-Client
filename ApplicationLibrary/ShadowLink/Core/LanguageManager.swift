@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 
-public enum AppLanguage: String, CaseIterable, Identifiable {
+public enum ShadowLinkLanguage: String, CaseIterable, Identifiable {
     case english = "en"
     case persian = "fa"
     case russian = "ru"
@@ -30,7 +30,7 @@ public enum AppLanguage: String, CaseIterable, Identifiable {
 public final class LanguageManager: ObservableObject {
     public static let shared = LanguageManager()
 
-    @Published public var currentLanguage: AppLanguage = .english {
+    @Published public var currentLanguage: ShadowLinkLanguage = .english {
         didSet {
             UserDefaults.standard.set(currentLanguage.rawValue, forKey: "app_language")
         }
@@ -42,10 +42,10 @@ public final class LanguageManager: ObservableObject {
 
     private init() {
         let saved = UserDefaults.standard.string(forKey: "app_language") ?? "en"
-        self.currentLanguage = AppLanguage(rawValue: saved) ?? .english
+        self.currentLanguage = ShadowLinkLanguage(rawValue: saved) ?? .english
     }
 
-    public func setLanguage(_ lang: AppLanguage) {
+    public func setLanguage(_ lang: ShadowLinkLanguage) {
         self.currentLanguage = lang
     }
 
@@ -55,8 +55,8 @@ public final class LanguageManager: ObservableObject {
 }
 
 public struct ShadowLinkStrings {
-    private static let translations: [AppLanguage: [String: String]] = [
-        .en: [
+    private static let translations: [ShadowLinkLanguage: [String: String]] = [
+        .english: [
             "auth.login": "Log in",
             "auth.register": "Sign up",
             "auth.email": "Email address",
@@ -107,7 +107,7 @@ public struct ShadowLinkStrings {
             "common.copy": "Copy",
             "common.copied": "Copied to clipboard"
         ],
-        .fa: [
+        .persian: [
             "auth.login": "ورود به حساب",
             "auth.register": "ثبت نام",
             "auth.email": "آدرس ایمیل",
@@ -158,7 +158,7 @@ public struct ShadowLinkStrings {
             "common.copy": "کپی",
             "common.copied": "کپی شد"
         ],
-        .ru: [
+        .russian: [
             "auth.login": "Вход",
             "auth.register": "Регистрация",
             "auth.email": "Электронная почта",
@@ -209,7 +209,7 @@ public struct ShadowLinkStrings {
             "common.copy": "Копировать",
             "common.copied": "Скопировано"
         ],
-        .zh: [
+        .chinese: [
             "auth.login": "登录",
             "auth.register": "注册",
             "auth.email": "电子邮箱",
@@ -260,7 +260,7 @@ public struct ShadowLinkStrings {
             "common.copy": "复制",
             "common.copied": "已复制"
         ],
-        .tr: [
+        .turkish: [
             "auth.login": "Giriş Yap",
             "auth.register": "Kayıt Ol",
             "auth.email": "E-posta Adresi",
@@ -313,7 +313,7 @@ public struct ShadowLinkStrings {
         ]
     ]
 
-    public static func get(_ key: String, lang: AppLanguage) -> String {
-        return translations[lang]?[key] ?? translations[.en]?[key] ?? key
+    public static func get(_ key: String, lang: ShadowLinkLanguage) -> String {
+        return translations[lang]?[key] ?? translations[.english]?[key] ?? key
     }
 }

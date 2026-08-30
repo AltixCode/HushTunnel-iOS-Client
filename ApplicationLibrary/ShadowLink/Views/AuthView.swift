@@ -145,7 +145,7 @@ public struct AuthView: View {
                 }
             }
             .confirmationDialog(lang.tr("common.language"), isPresented: $showLanguagePicker, titleVisibility: .visible) {
-                ForEach(AppLanguage.allCases) { l in
+                ForEach(ShadowLinkLanguage.allCases) { l in
                     Button(l.displayName) {
                         lang.setLanguage(l)
                     }
