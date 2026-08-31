@@ -139,9 +139,9 @@ public struct UserHomeView: View {
 
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "creditcard.fill")
+                                    Image(systemName: "checkmark.shield.fill")
                                         .font(.caption)
-                                        .foregroundColor(.green)
+                                        .foregroundColor(.accentColor)
                                         .padding(.top, 2)
                                     Text(lang.tr("web.paymentMethods"))
                                         .font(.caption)
@@ -342,7 +342,7 @@ public struct SubscriptionCardView: View {
                         Text("Unlimited")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                            .foregroundColor(.green)
+                            .foregroundColor(.accentColor)
                     }
                 }
             }
