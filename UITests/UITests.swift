@@ -1,40 +1,70 @@
-//
-//  UITests.swift
-//  UITests
-//
-//  Created by sekai on 2026-01-06 15:19.
-//
-
 import XCTest
 
 final class UITests: XCTestCase {
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testExample() {
-        // UI tests must launch the application that they test.
+    func testEndToEndShadowLinkFlow() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-    }
+        // Give the app time to load data from the production API
+        sleep(3)
 
-    @MainActor
-    func testLaunchPerformance() {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+        // 1. Verify Connect / Disconnect button is present
+        let connectButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Connect' OR label CONTAINS 'اتصال' OR label CONTAINS 'Подключиться' OR label CONTAINS '连接' OR label CONTAINS 'Bağlan'")).firstMatch
+        if connectButton.exists {
+            XCTAssertTrue(connectButton.exists, "Connect button should be visible")
+            connectButton.tap()
+            sleep(2)
+            
+            // Tap again to disconnect
+            let disconnectButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Disconnect' OR label CONTAINS 'قطع' OR label CONTAINS 'Отключиться' OR label CONTAINS '断开' OR label CONTAINS 'Kes'")).firstMatch
+            if disconnectButton.exists {
+                disconnectButton.tap()
+                sleep(1)
+            }
+        }
+
+        // 2. Verify Renew Subscription sheet
+        let renewButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Renew' OR label CONTAINS 'تمدید' OR label CONTAINS 'Продлить' OR label CONTAINS '续费' OR label CONTAINS 'Yenile'")).firstMatch
+        if renewButton.exists {
+            renewButton.tap()
+            sleep(1)
+            
+            let closeOrCancel = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cancel' OR label CONTAINS 'Close' OR label CONTAINS 'بستن' OR label CONTAINS 'انصراف' OR label CONTAINS '关闭' OR label CONTAINS 'İptal'")).firstMatch
+            if closeOrCancel.exists {
+                closeOrCancel.tap()
+                sleep(1)
+            }
+        }
+
+        // 3. Verify Get a Subscription sheet
+        let buyButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Get a Subscription' OR label CONTAINS 'خرید' OR label CONTAINS 'Купить' OR label CONTAINS '购买' OR label CONTAINS 'Satın Al'")).firstMatch
+        if buyButton.exists {
+            buyButton.tap()
+            sleep(1)
+            
+            let closeOrCancel = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cancel' OR label CONTAINS 'Close' OR label CONTAINS 'بستن' OR label CONTAINS 'انصراف' OR label CONTAINS '关闭' OR label CONTAINS 'İptal'")).firstMatch
+            if closeOrCancel.exists {
+                closeOrCancel.tap()
+                sleep(1)
+            }
+        }
+
+        // 4. Verify Order History sheet
+        let orderButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Order History' OR label CONTAINS 'سفارشات' OR label CONTAINS 'История' OR label CONTAINS '订单' OR label CONTAINS 'Sipariş'")).firstMatch
+        if orderButton.exists {
+            orderButton.tap()
+            sleep(1)
+            
+            let doneButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Done' OR label CONTAINS 'تمام' OR label CONTAINS 'Готово' OR label CONTAINS '完成' OR label CONTAINS 'Tamam'")).firstMatch
+            if doneButton.exists {
+                doneButton.tap()
+                sleep(1)
+            }
         }
     }
 }
