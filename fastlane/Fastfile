@@ -66,6 +66,35 @@ platform :ios do
     shutdown_simulator("iPhone 12 Pro Max")
     shutdown_simulator("iPad Pro 13-inch (M4)")
   end
+
+  desc "Build and upload iOS app to TestFlight"
+  lane :beta do
+    build_app(
+      project: "sing-box.xcodeproj",
+      scheme: "SFI",
+      export_method: "app-store",
+      output_directory: "./build/output",
+      output_name: "HushTunnel.ipa"
+    )
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Build and upload iOS app to App Store"
+  lane :release do
+    build_app(
+      project: "sing-box.xcodeproj",
+      scheme: "SFI",
+      export_method: "app-store",
+      output_directory: "./build/output",
+      output_name: "HushTunnel.ipa"
+    )
+    upload_to_app_store(
+      skip_metadata: true,
+      skip_screenshots: true
+    )
+  end
 end
 
 platform :mac do
