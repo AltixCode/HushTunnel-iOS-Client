@@ -16,6 +16,25 @@ public struct UserHomeView: View {
     @State private var showServerPickerSheet = false
     @State private var selectedServer: ServerNodeItem? = nil
 
+    private var currentDisplayServer: ServerNodeItem {
+        if let selected = selectedServer { return selected }
+        if let sList = meResult?.servers, !sList.isEmpty {
+            return sList.first(where: { $0.isDefault == true }) ?? sList.first!
+        }
+        return ServerNodeItem(
+            id: "netherlands-primary",
+            name: "Netherlands 01 (Amsterdam)",
+            countryCode: "NL",
+            flag: "🇳🇱",
+            city: "Amsterdam",
+            host: "5.255.125.216",
+            port: 443,
+            protocolName: "vless",
+            isDefault: true
+        )
+    }
+
+
     public init() {}
 
     public var body: some View {
@@ -78,16 +97,17 @@ public struct UserHomeView: View {
                         Button {
                             showServerPickerSheet = true
                         } label: {
+                            let s = currentDisplayServer
                             HStack(spacing: 14) {
-                                Text(selectedServer?.flag ?? "🌐")
+                                Text(s.flag)
                                     .font(.system(size: 30))
 
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(selectedServer?.name ?? "Auto Location (Fastest)")
+                                    Text(s.name)
                                         .font(.headline)
                                         .foregroundColor(.primary)
 
-                                    Text("\(selectedServer?.city ?? selectedServer?.countryCode ?? "Global") · VLESS-Reality")
+                                    Text("\(s.city ?? s.countryCode) · VLESS-Reality")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }

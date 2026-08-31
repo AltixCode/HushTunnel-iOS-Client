@@ -327,15 +327,16 @@ public struct ResellerPersonalVpnTabView: View {
                 // Server Location Selector Card
                 Button(action: onOpenServerPicker) {
                     HStack(spacing: 14) {
-                        Text(selectedServer?.flag ?? "🌐")
+                        let currentServer = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
+                        Text(currentServer?.flag ?? "🇳🇱")
                             .font(.system(size: 30))
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(selectedServer?.name ?? "Auto Location (Fastest)")
+                            Text(currentServer?.name ?? "Netherlands 01 (Amsterdam)")
                                 .font(.headline)
                                 .foregroundColor(.primary)
 
-                            Text("\(selectedServer?.city ?? selectedServer?.countryCode ?? "Global") · VLESS-Reality")
+                            Text("\(currentServer?.city ?? currentServer?.countryCode ?? "Amsterdam") · VLESS-Reality")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
