@@ -51,6 +51,13 @@ jobs:
         run: |
           xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj
 
+      - name: Compute Dynamic Version
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          echo "Computed Version: 1.0.$COMMIT_COUNT (Build: $COMMIT_COUNT)"
+          echo "APP_MARKETING_VERSION=1.0.$COMMIT_COUNT" >> $GITHUB_ENV
+          echo "APP_BUILD_NUMBER=$COMMIT_COUNT" >> $GITHUB_ENV
+
       - name: Setup Keychain & Certificates (if provided)
         id: keychain_setup
         run: |
@@ -91,7 +98,9 @@ jobs:
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
               -destination 'generic/platform=iOS' \
-              -allowProvisioningUpdates
+              -allowProvisioningUpdates \
+              MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
+              CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
               
             echo "Exporting IPA package..."
             cat << 'PLIST_EOF' > build/exportOptions.plist
@@ -122,7 +131,9 @@ jobs:
               -scheme SFI \
               -destination 'generic/platform=iOS' \
               -derivedDataPath build/DerivedData \
-              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
+              CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
               
             mkdir -p build/output/Payload
             cp -r build/DerivedData/Build/Products/Debug-iphoneos/HushTunnel.app build/output/Payload/ || \
