@@ -25,10 +25,42 @@ public struct SubscriptionInfo: Codable, Identifiable, Hashable {
     public let subscriptionUrl: String
 }
 
+
+public struct ServerNodeItem: Codable, Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let countryCode: String
+    public let flag: String
+    public let city: String?
+    public let host: String
+    public let port: Int
+    public let protocolName: String?
+    public let isDefault: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, countryCode, flag, city, host, port
+        case protocolName = "protocol"
+        case isDefault
+    }
+
+    public init(id: String, name: String, countryCode: String, flag: String, city: String?, host: String, port: Int, protocolName: String?, isDefault: Bool?) {
+        self.id = id
+        self.name = name
+        self.countryCode = countryCode
+        self.flag = flag
+        self.city = city
+        self.host = host
+        self.port = port
+        self.protocolName = protocolName
+        self.isDefault = isDefault
+    }
+}
+
 public struct MeResult: Codable {
     public let email: String
     public let role: String
     public let subscriptions: [SubscriptionInfo]
+    public let servers: [ServerNodeItem]?
 }
 
 public struct AuthResult: Codable {

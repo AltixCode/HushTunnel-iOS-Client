@@ -12,6 +12,9 @@ public struct ResellerHomeView: View {
     @State private var deposits: [ResellerDeposit] = []
     @State private var plans: [PlanInfo] = []
     @State private var gateways = GatewayInfo()
+    @State private var servers: [ServerNodeItem] = []
+    @State private var selectedServer: ServerNodeItem? = nil
+    @State private var showServerPickerSheet = false
 
     @State private var isLoading = false
     @State private var isConnected = false
@@ -38,9 +41,12 @@ public struct ResellerHomeView: View {
                 ResellerPersonalVpnTabView(
                     overview: overview,
                     personalSub: subscriptions.first(where: { $0.isSelf == true }),
+                    servers: servers,
+                    selectedServer: selectedServer,
                     isConnected: isConnected,
                     isConnecting: isConnecting,
                     onToggleConnect: toggleConnection,
+                    onOpenServerPicker: { showServerPickerSheet = true },
                     onCreateSelfSub: { showSelfSubSheet = true }
                 )
                 .tabItem {
@@ -147,6 +153,26 @@ public struct ResellerHomeView: View {
             }
             .sheet(isPresented: $showChangePasswordSheet) {
                 ChangePasswordSheetView()
+            }
+            .sheet(isPresented: $showServerPickerSheet) {
+                ServerPickerSheetView(
+                    servers: servers,
+                    selectedServer: selectedServer,
+                    onSelect: { s in
+                        selectedServer = s
+                        if isConnected {
+                            isConnecting = true
+                            isConnected = false
+                            Task {
+                                try? await Task.sleep(nanoseconds: 600_000_000)
+                                await MainActor.run {
+                                    self.isConnected = true
+                                    self.isConnecting = false
+                                }
+                            }
+                        }
+                    }
+                )
             }
             .sheet(isPresented: $showSelfSubSheet) {
                 ResellerSelfSubSheetView(plans: plans, balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)
@@ -258,9 +284,12 @@ public struct ResellerHomeView: View {
 public struct ResellerPersonalVpnTabView: View {
     let overview: ResellerOverview?
     let personalSub: ResellerSubscription?
+    let servers: [ServerNodeItem]
+    let selectedServer: ServerNodeItem?
     let isConnected: Bool
     let isConnecting: Bool
     let onToggleConnect: () -> Void
+    let onOpenServerPicker: () -> Void
     let onCreateSelfSub: () -> Void
     @ObservedObject var lang = LanguageManager.shared
 
@@ -294,6 +323,45 @@ public struct ResellerPersonalVpnTabView: View {
                     }
                 }
                 .padding(.top, 24)
+
+                // Server Location Selector Card
+                Button(action: onOpenServerPicker) {
+                    HStack(spacing: 14) {
+                        Text(selectedServer?.flag ?? "🌐")
+                            .font(.system(size: 30))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(selectedServer?.name ?? "Auto Location (Fastest)")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+
+                            Text("\(selectedServer?.city ?? selectedServer?.countryCode ?? "Global") · VLESS-Reality")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        HStack(spacing: 4) {
+                            Text("Switch")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.accentColor)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundColor(.accentColor)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.accentColor.opacity(0.12))
+                        .cornerRadius(8)
+                    }
+                    .padding(16)
+                    .background(Color(uiColor: .systemBackground))
+                    .cornerRadius(20)
+                    .padding(.horizontal, 16)
+                }
+                .buttonStyle(PlainButtonStyle())
 
                 // Personal VPN Status Card
                 if let sub = personalSub {

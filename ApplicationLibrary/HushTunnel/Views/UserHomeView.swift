@@ -13,6 +13,8 @@ public struct UserHomeView: View {
     @State private var showOrdersSheet = false
     @State private var showLanguagePicker = false
     @State private var showChangePasswordSheet = false
+    @State private var showServerPickerSheet = false
+    @State private var selectedServer: ServerNodeItem? = nil
 
     public init() {}
 
@@ -71,6 +73,47 @@ public struct UserHomeView: View {
                         .background(Color(uiColor: .systemBackground))
                         .cornerRadius(24)
                         .padding(.horizontal, 16)
+
+                        // Server Location Selector Card
+                        Button {
+                            showServerPickerSheet = true
+                        } label: {
+                            HStack(spacing: 14) {
+                                Text(selectedServer?.flag ?? "🌐")
+                                    .font(.system(size: 30))
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(selectedServer?.name ?? "Auto Location (Fastest)")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+
+                                    Text("\(selectedServer?.city ?? selectedServer?.countryCode ?? "Global") · VLESS-Reality")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                HStack(spacing: 4) {
+                                    Text("Switch")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.accentColor)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2)
+                                        .foregroundColor(.accentColor)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.accentColor.opacity(0.12))
+                                .cornerRadius(8)
+                            }
+                            .padding(16)
+                            .background(Color(uiColor: .systemBackground))
+                            .cornerRadius(20)
+                            .padding(.horizontal, 16)
+                        }
+                        .buttonStyle(PlainButtonStyle())
 
                         // Subscriptions Section
                         if let subs = meResult?.subscriptions, !subs.isEmpty {
@@ -242,10 +285,34 @@ public struct UserHomeView: View {
             .sheet(isPresented: $showChangePasswordSheet) {
                 ChangePasswordSheetView()
             }
+            .sheet(isPresented: $showServerPickerSheet) {
+                ServerPickerSheetView(
+                    servers: meResult?.servers ?? [],
+                    selectedServer: selectedServer,
+                    onSelect: { newServer in
+                        switchServer(to: newServer)
+                    }
+                )
+            }
             .sheet(isPresented: $showOrdersSheet) {
                 OrdersListView()
             }
             .onAppear(perform: refreshData)
+        }
+    }
+
+    private func switchServer(to newServer: ServerNodeItem) {
+        selectedServer = newServer
+        if isConnected {
+            isConnecting = true
+            isConnected = false
+            Task {
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                await MainActor.run {
+                    self.isConnected = true
+                    self.isConnecting = false
+                }
+            }
         }
     }
 
