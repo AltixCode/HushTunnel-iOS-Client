@@ -36,7 +36,9 @@ public struct OverviewView: View {
             } else {
                 ScrollView {
                     cardGrid
+                        .frame(maxWidth: 680)
                         .padding()
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
