@@ -13,7 +13,7 @@ final class UITests: XCTestCase {
         // Give the app time to load data from the production API
         sleep(3)
 
-        // 1. Verify Connect / Disconnect button is present
+        // 1. Verify Connect / Disconnect button is present and interactive
         let connectButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Connect' OR label CONTAINS 'اتصال' OR label CONTAINS 'Подключиться' OR label CONTAINS '连接' OR label CONTAINS 'Bağlan'")).firstMatch
         if connectButton.exists {
             XCTAssertTrue(connectButton.exists, "Connect button should be visible")
@@ -28,41 +28,34 @@ final class UITests: XCTestCase {
             }
         }
 
-        // 2. Verify Renew Subscription sheet
-        let renewButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Renew' OR label CONTAINS 'تمدید' OR label CONTAINS 'Продлить' OR label CONTAINS '续费' OR label CONTAINS 'Yenile'")).firstMatch
-        if renewButton.exists {
-            renewButton.tap()
+        // 2. Verify Web Store & Subscriptions Notice Card Link
+        let webLink = app.links.matching(NSPredicate(format: "label CONTAINS 'hushtunnel.com' OR label CONTAINS 'https://www.hushtunnel.com'")).firstMatch
+        if webLink.exists {
+            XCTAssertTrue(webLink.exists, "Web store notice link should be present")
+        }
+
+        // 3. Verify Change Password sheet modal
+        let changePasswordButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Change Password' OR label CONTAINS 'تغییر رمز' OR label CONTAINS 'Сменить пароль' OR label CONTAINS '修改密码' OR label CONTAINS 'Şifre Değiştir'")).firstMatch
+        if changePasswordButton.exists {
+            changePasswordButton.tap()
             sleep(1)
-            
-            let closeOrCancel = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cancel' OR label CONTAINS 'Close' OR label CONTAINS 'بستن' OR label CONTAINS 'انصراف' OR label CONTAINS '关闭' OR label CONTAINS 'İptal'")).firstMatch
-            if closeOrCancel.exists {
-                closeOrCancel.tap()
+
+            let cancelButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cancel' OR label CONTAINS 'انصراف' OR label CONTAINS 'Отмена' OR label CONTAINS '取消' OR label CONTAINS 'İptal'")).firstMatch
+            if cancelButton.exists {
+                cancelButton.tap()
                 sleep(1)
             }
         }
 
-        // 3. Verify Get a Subscription sheet
-        let buyButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Get a Subscription' OR label CONTAINS 'خرید' OR label CONTAINS 'Купить' OR label CONTAINS '购买' OR label CONTAINS 'Satın Al'")).firstMatch
-        if buyButton.exists {
-            buyButton.tap()
-            sleep(1)
-            
-            let closeOrCancel = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cancel' OR label CONTAINS 'Close' OR label CONTAINS 'بستن' OR label CONTAINS 'انصراف' OR label CONTAINS '关闭' OR label CONTAINS 'İptal'")).firstMatch
-            if closeOrCancel.exists {
-                closeOrCancel.tap()
-                sleep(1)
-            }
-        }
-
-        // 4. Verify Order History sheet
+        // 4. Verify Order History sheet modal
         let orderButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Order History' OR label CONTAINS 'سفارشات' OR label CONTAINS 'История' OR label CONTAINS '订单' OR label CONTAINS 'Sipariş'")).firstMatch
         if orderButton.exists {
             orderButton.tap()
             sleep(1)
             
-            let doneButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Done' OR label CONTAINS 'تمام' OR label CONTAINS 'Готово' OR label CONTAINS '完成' OR label CONTAINS 'Tamam'")).firstMatch
-            if doneButton.exists {
-                doneButton.tap()
+            let closeOrCancel = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cancel' OR label CONTAINS 'Close' OR label CONTAINS 'بستن' OR label CONTAINS 'انصراف' OR label CONTAINS '关闭' OR label CONTAINS 'İptal'")).firstMatch
+            if closeOrCancel.exists {
+                closeOrCancel.tap()
                 sleep(1)
             }
         }
