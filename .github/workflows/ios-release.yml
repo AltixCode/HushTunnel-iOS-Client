@@ -40,8 +40,16 @@ jobs:
 
       - name: Select Xcode Version
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
+          XCODE_PATH=$(find /Applications -maxdepth 1 -name "Xcode_16*.app" -o -name "Xcode.app" | sort -V | tail -n 1)
+          if [ -n "$XCODE_PATH" ]; then
+            echo "Selecting $XCODE_PATH"
+            sudo xcode-select -s "$XCODE_PATH"
+          fi
           xcodebuild -version
+
+      - name: Resolve Swift Package Dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj
 
       - name: Setup Keychain & Certificates (if provided)
         id: keychain_setup

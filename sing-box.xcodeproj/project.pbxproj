@@ -4052,8 +4052,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 7.11.1;
+				kind = exactVersion;
+				version = 7.8.0;
 			};
 		};
 		3A4A020B2B53E3DC004EFB87 /* XCRemoteSwiftPackageReference "qrcode" */ = {
