@@ -5,18 +5,14 @@ public struct UserHomeView: View {
     @ObservedObject var lang = LanguageManager.shared
 
     @State private var meResult: MeResult?
-    @State private var plans: [PlanInfo] = []
-    @State private var gateways = GatewayInfo()
     @State private var isLoading = false
     @State private var isConnected = false
     @State private var isConnecting = false
     @State private var errorMessage: String?
 
-    @State private var showBuyPlanSheet = false
-    @State private var showRenewSheet = false
     @State private var showOrdersSheet = false
     @State private var showLanguagePicker = false
-    @State private var selectedSubscriptionForRenew: SubscriptionInfo?
+    @State private var showChangePasswordSheet = false
 
     public init() {}
 
@@ -84,11 +80,8 @@ public struct UserHomeView: View {
                                     .padding(.horizontal, 20)
 
                                 ForEach(subs) { sub in
-                                    SubscriptionCardView(sub: sub, onRenew: {
-                                        selectedSubscriptionForRenew = sub
-                                        showRenewSheet = true
-                                    })
-                                    .padding(.horizontal, 16)
+                                    SubscriptionCardView(sub: sub)
+                                        .padding(.horizontal, 16)
                                 }
                             }
                         } else if !isLoading {
@@ -106,19 +99,6 @@ public struct UserHomeView: View {
                                     .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 20)
-
-                                Button {
-                                    showBuyPlanSheet = true
-                                } label: {
-                                    Text(lang.tr("vpn.buyPlan"))
-                                        .fontWeight(.semibold)
-                                        .padding(.horizontal, 24)
-                                        .padding(.vertical, 12)
-                                        .background(Color.accentColor)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(12)
-                                }
-                                .padding(.top, 6)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(24)
@@ -127,15 +107,75 @@ public struct UserHomeView: View {
                             .padding(.horizontal, 16)
                         }
 
-                        // Quick Actions
+                        // Official Web Store & Renewal Notice Card
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "globe.americas.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.accentColor)
+                                Text(lang.tr("web.storeNotice"))
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                            }
+
+                            Text(lang.tr("web.storeDesc"))
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+
+                            Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                                HStack {
+                                    Image(systemName: "arrow.up.right.square")
+                                    Text("https://www.hushtunnel.com")
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                    Image(systemName: "safari")
+                                }
+                                .padding(12)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.accentColor.opacity(0.12))
+                                .foregroundColor(.accentColor)
+                                .cornerRadius(12)
+                            }
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: "creditcard.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                        .padding(.top, 2)
+                                    Text(lang.tr("web.paymentMethods"))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: "person.2.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+                                        .padding(.top, 2)
+                                    Text(lang.tr("web.resellerNotice"))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
+                        .background(Color(uiColor: .systemBackground))
+                        .cornerRadius(20)
+                        .padding(.horizontal, 16)
+
+                        // Quick Actions (Order History & Password)
                         HStack(spacing: 12) {
                             Button {
-                                showBuyPlanSheet = true
+                                showChangePasswordSheet = true
                             } label: {
                                 HStack {
-                                    Image(systemName: "cart.fill")
-                                    Text(lang.tr("vpn.buyPlan"))
+                                    Image(systemName: "key.fill")
+                                    Text(lang.tr("account.changePassword"))
                                 }
+                                .font(.subheadline)
                                 .frame(maxWidth: .infinity)
                                 .padding(14)
                                 .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -149,6 +189,7 @@ public struct UserHomeView: View {
                                     Image(systemName: "list.bullet.rectangle")
                                     Text(lang.tr("orders.title"))
                                 }
+                                .font(.subheadline)
                                 .frame(maxWidth: .infinity)
                                 .padding(14)
                                 .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -174,11 +215,19 @@ public struct UserHomeView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        authStore.logout()
-                    } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
+                    HStack(spacing: 16) {
+                        Button {
+                            showChangePasswordSheet = true
+                        } label: {
+                            Image(systemName: "lock.rotation")
+                        }
+
+                        Button {
+                            authStore.logout()
+                        } label: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundColor(.red)
+                        }
                     }
                 }
             }
@@ -190,11 +239,8 @@ public struct UserHomeView: View {
                 }
                 Button(lang.tr("common.cancel"), role: .cancel) {}
             }
-            .sheet(isPresented: $showBuyPlanSheet) {
-                PlanCheckoutSheetView(plans: plans, gateways: gateways, subscriptionId: nil, onCompleted: refreshData)
-            }
-            .sheet(isPresented: $showRenewSheet) {
-                PlanCheckoutSheetView(plans: plans, gateways: gateways, subscriptionId: selectedSubscriptionForRenew?.id, onCompleted: refreshData)
+            .sheet(isPresented: $showChangePasswordSheet) {
+                ChangePasswordSheetView()
             }
             .sheet(isPresented: $showOrdersSheet) {
                 OrdersListView()
@@ -219,16 +265,9 @@ public struct UserHomeView: View {
         isLoading = true
         Task {
             do {
-                async let meTask = ApiClient.shared.me()
-                async let plansTask = ApiClient.shared.plans()
-                async let gatewaysTask = ApiClient.shared.gateways()
-
-                let (meRes, plansRes, gatewaysRes) = try await (meTask, plansTask, gatewaysTask)
-
+                let meRes = try await ApiClient.shared.me()
                 await MainActor.run {
                     self.meResult = meRes
-                    self.plans = plansRes
-                    self.gateways = gatewaysRes
                     self.isLoading = false
                 }
             } catch {
@@ -245,7 +284,6 @@ public struct UserHomeView: View {
 
 public struct SubscriptionCardView: View {
     let sub: SubscriptionInfo
-    let onRenew: () -> Void
     @ObservedObject var lang = LanguageManager.shared
 
     public var body: some View {
@@ -263,15 +301,19 @@ public struct SubscriptionCardView: View {
 
                 Spacer()
 
-                Button(action: onRenew) {
-                    Text(lang.tr("vpn.renew"))
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.15))
-                        .foregroundColor(.accentColor)
-                        .cornerRadius(8)
+                Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption2)
+                        Text(lang.tr("vpn.renew"))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.accentColor.opacity(0.15))
+                    .foregroundColor(.accentColor)
+                    .cornerRadius(8)
                 }
             }
 
@@ -299,20 +341,37 @@ public struct SubscriptionCardView: View {
                         Spacer()
                         Text("Unlimited")
                             .font(.caption2)
-                            .fontWeight(.medium)
+                            .fontWeight(.semibold)
                             .foregroundColor(.green)
                     }
                 }
             }
         }
-        .padding(16)
+        .padding(18)
         .background(Color(uiColor: .systemBackground))
-        .cornerRadius(16)
+        .cornerRadius(18)
         .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
 
     private func formattedExpiry(_ dateString: String) -> String {
-        return "Expires: \(dateString.prefix(10))"
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = formatter.date(from: dateString)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: dateString)
+        }
+
+        guard let exp = date else { return "\(lang.tr("vpn.expires")): \(dateString)" }
+
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: Date(), to: exp).day ?? 0
+        if days < 0 {
+            return "Expired"
+        }
+        let outFormat = DateFormatter()
+        outFormat.dateStyle = .medium
+        return "\(lang.tr("vpn.expires")): \(outFormat.string(from: exp)) (\(String(format: lang.tr("vpn.daysRemaining"), max(0, days))))"
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
@@ -323,211 +382,113 @@ public struct SubscriptionCardView: View {
     }
 }
 
-// MARK: - Plan Checkout Sheet
+// MARK: - Orders List View
 
-public struct PlanCheckoutSheetView: View {
-    let plans: [PlanInfo]
-    let gateways: GatewayInfo
-    let subscriptionId: String?
-    let onCompleted: () -> Void
-
-    @Environment(\.dismiss) var dismiss
+public struct OrdersListView: View {
+    @Environment(\.presentationMode) var presentationMode
     @ObservedObject var lang = LanguageManager.shared
-
-    @State private var selectedPlanId: String = ""
-    @State private var selectedGateway = "MANUAL"
-    @State private var isProcessing = false
+    @State private var orders: [OrderItem] = []
+    @State private var isLoading = true
     @State private var errorMessage: String?
+
+    public init() {}
 
     public var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("Choose Duration / Plan")) {
-                    ForEach(plans) { plan in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(plan.name)
-                                    .fontWeight(.medium)
-                                Text(plan.description ?? "\(plan.durationDays) days access")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            Text("$\(String(format: "%.2f", plan.priceUsd))")
-                                .fontWeight(.bold)
-                                .foregroundColor(.accentColor)
-
-                            if selectedPlanId == plan.id {
-                                Image(systemName: "checkmark")
-                                    .foregroundColor(.accentColor)
-                                    .padding(.leading, 8)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedPlanId = plan.id
-                        }
+            Group {
+                if isLoading {
+                    ProgressView()
+                } else if let error = errorMessage {
+                    VStack(spacing: 8) {
+                        Text("Failed to load orders")
+                            .font(.headline)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                }
-
-                Section(header: Text("Payment Method")) {
-                    if gateways.cryptomus {
-                        HStack {
-                            Text("Cryptocurrency (Cryptomus)")
-                            Spacer()
-                            if selectedGateway == "CRYPTOMUS" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "CRYPTOMUS" }
+                } else if orders.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "tray")
+                            .font(.largeTitle)
+                            .foregroundColor(.secondary)
+                        Text("No orders found")
+                            .font(.headline)
                     }
-
-                    if gateways.nowpayments {
-                        HStack {
-                            Text("NOWPayments")
-                            Spacer()
-                            if selectedGateway == "NOWPAYMENTS" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "NOWPAYMENTS" }
+                } else {
+                    List(orders) { order in
+                        OrderRowView(order: order)
                     }
-
-                    if gateways.revolut {
-                        HStack {
-                            Text("Revolut Pay")
-                            Spacer()
-                            if selectedGateway == "REVOLUT" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "REVOLUT" }
-                    }
-
-                    HStack {
-                        Text("Manual / Admin Confirmation")
-                        Spacer()
-                        if selectedGateway == "MANUAL" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedGateway = "MANUAL" }
-                }
-
-                if let err = errorMessage {
-                    Section {
-                        Text(err).foregroundColor(.red).font(.caption)
-                    }
-                }
-
-                Section {
-                    Button(action: handleCheckout) {
-                        HStack {
-                            Spacer()
-                            if isProcessing {
-                                ProgressView().padding(.trailing, 8)
-                            }
-                            Text(subscriptionId != nil ? lang.tr("vpn.renew") : lang.tr("vpn.buyPlan"))
-                                .fontWeight(.bold)
-                            Spacer()
-                        }
-                    }
-                    .disabled(selectedPlanId.isEmpty || isProcessing)
                 }
             }
-            .navigationTitle(subscriptionId != nil ? lang.tr("vpn.renew") : lang.tr("vpn.buyPlan"))
+            .environment(\.layoutDirection, lang.layoutDirection)
+            .navigationTitle(lang.tr("orders.title"))
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(lang.tr("common.cancel")) { dismiss() }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(lang.tr("common.cancel")) {
+                        presentationMode.wrappedValue.dismiss()
+                    }
                 }
             }
-            .onAppear {
-                if selectedPlanId.isEmpty, let first = plans.first {
-                    selectedPlanId = first.id
-                }
-            }
+            .onAppear(perform: loadOrders)
         }
     }
 
-    private func handleCheckout() {
-        isProcessing = true
-        errorMessage = nil
-
+    private func loadOrders() {
         Task {
             do {
-                let res = try await ApiClient.shared.checkout(
-                    planId: selectedPlanId,
-                    gateway: selectedGateway,
-                    subscriptionId: subscriptionId
-                )
-
+                let ordersRes = try await ApiClient.shared.orders()
                 await MainActor.run {
-                    isProcessing = false
-                    if let urlStr = res.checkoutUrl, let url = URL(string: urlStr) {
-                        UIApplication.shared.open(url)
-                    }
-                    dismiss()
-                    onCompleted()
+                    self.orders = ordersRes
+                    self.isLoading = false
                 }
             } catch {
                 await MainActor.run {
-                    isProcessing = false
-                    errorMessage = error.localizedDescription
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
                 }
             }
         }
     }
 }
 
-// MARK: - Orders List Sheet
-
-public struct OrdersListView: View {
-    @Environment(\.dismiss) var dismiss
-    @ObservedObject var lang = LanguageManager.shared
-    @State private var orders: [OrderItem] = []
-    @State private var isLoading = false
+public struct OrderRowView: View {
+    let order: OrderItem
 
     public var body: some View {
-        NavigationView {
-            List(orders) { order in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(order.planName)
-                            .fontWeight(.medium)
-                        Text(order.createdAt.prefix(10))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(order.planName)
+                    .font(.headline)
+                Spacer()
+                Text(String(format: "$%.2f", order.amountUsd))
+                    .font(.headline)
+                    .foregroundColor(.accentColor)
+            }
+            HStack {
+                Text(order.status)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(statusColor(order.status).opacity(0.15))
+                    .foregroundColor(statusColor(order.status))
+                    .cornerRadius(6)
 
-                    Spacer()
+                Spacer()
 
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("$\(String(format: "%.2f", order.amountUsd))")
-                            .fontWeight(.bold)
-                        Text(order.status)
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(order.status == "PAID" ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
-                            .foregroundColor(order.status == "PAID" ? .green : .orange)
-                            .cornerRadius(4)
-                    }
-                }
+                Text(order.gateway)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
-            .navigationTitle(lang.tr("orders.title"))
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(lang.tr("common.done")) { dismiss() }
-                }
-            }
-            .onAppear {
-                Task {
-                    isLoading = true
-                    if let list = try? await ApiClient.shared.orders() {
-                        await MainActor.run { orders = list }
-                    }
-                    isLoading = false
-                }
-            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status.uppercased() {
+        case "PAID", "COMPLETED", "ACTIVE": return .green
+        case "PENDING": return .orange
+        default: return .gray
         }
     }
 }

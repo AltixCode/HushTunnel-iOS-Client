@@ -20,6 +20,7 @@ public struct ResellerHomeView: View {
     @State private var errorMessage: String?
 
     // Dialog sheets
+    @State private var showChangePasswordSheet = false
     @State private var showSelfSubSheet = false
     @State private var showAddCustomerSheet = false
     @State private var showCreateOrderSheet = false
@@ -113,6 +114,12 @@ public struct ResellerHomeView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
+                        Button {
+                            showChangePasswordSheet = true
+                        } label: {
+                            Image(systemName: "lock.rotation")
+                        }
+
                         Button(action: refreshAll) {
                             if isLoading {
                                 ProgressView()
@@ -137,6 +144,9 @@ public struct ResellerHomeView: View {
                     }
                 }
                 Button(lang.tr("common.cancel"), role: .cancel) {}
+            }
+            .sheet(isPresented: $showChangePasswordSheet) {
+                ChangePasswordSheetView()
             }
             .sheet(isPresented: $showSelfSubSheet) {
                 ResellerSelfSubSheetView(plans: plans, balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)

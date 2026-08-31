@@ -236,4 +236,13 @@ public final class ApiClient: Sendable {
         )
         return try await perform(request)
     }
+
+    public func changePassword(currentPassword: String?, newPassword: String) async throws {
+        var body: [String: Any] = ["newPassword": newPassword]
+        if let current = currentPassword, !current.isEmpty {
+            body["currentPassword"] = current
+        }
+        let request = try makeRequest(path: "/api/mobile/account/password", method: "POST", body: body)
+        let _: SimpleSuccessResponse = try await perform(request)
+    }
 }
