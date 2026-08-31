@@ -171,7 +171,7 @@ jobs:
           fi
 
       - name: Upload to App Store Connect / TestFlight
-        if: env.SIGNING_CONFIGURED == 'true' && (inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
+        if: env.SIGNING_CONFIGURED == 'true' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
         run: |
           if [ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}" ]; then
             echo "Uploading IPA to App Store Connect / TestFlight via altool..."
@@ -209,7 +209,7 @@ jobs:
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        if: (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') && github.ref != 'refs/heads/dev'
         with:
           tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
           name: ${{ inputs.release_title || steps.tag_info.outputs.TAG_NAME }}
