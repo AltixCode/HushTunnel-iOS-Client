@@ -38,6 +38,12 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 0
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+
       - name: Select Xcode Version
         run: |
           XCODE_PATH=$(find /Applications -maxdepth 1 -name "Xcode_16*.app" -o -name "Xcode.app" | sort -V | tail -n 1)
@@ -46,6 +52,27 @@ jobs:
             sudo xcode-select -s "$XCODE_PATH"
           fi
           xcodebuild -version
+
+      - name: Cache Libbox.xcframework
+        id: cache-libbox
+        uses: actions/cache@v4
+        with:
+          path: Libbox.xcframework
+          key: libbox-apple-${{ runner.os }}-v1.14
+
+      - name: Build Libbox.xcframework
+        if: steps.cache-libbox.outputs.cache-hit != 'true'
+        run: |
+          echo "Building Libbox.xcframework from core..."
+          git clone --depth 1 https://github.com/sagernet/sing-box.git /tmp/sing-box-source
+          pushd /tmp/sing-box-source
+          go install github.com/sagernet/gomobile/cmd/gomobile@latest
+          go install github.com/sagernet/gomobile/cmd/gobind@latest
+          export PATH=$(go env GOPATH)/bin:$PATH
+          gomobile init
+          go run ./cmd/internal/build_libbox -target apple -platform ios
+          popd
+          cp -r /tmp/sing-box-source/Libbox.xcframework ./Libbox.xcframework
 
       - name: Resolve Swift Package Dependencies
         run: |
