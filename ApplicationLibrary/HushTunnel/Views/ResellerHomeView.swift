@@ -396,10 +396,10 @@ public struct ResellerDashboardTabView: View {
                         }
                     }
 
-                    Button(action: onAddFunds) {
+                    Link(destination: URL(string: "https://www.hushtunnel.com")!) {
                         HStack {
-                            Image(systemName: "plus.circle.fill")
-                            Text(lang.tr("reseller.addFunds"))
+                            Image(systemName: "arrow.up.forward.app.fill")
+                            Text("Top Up at hushtunnel.com")
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
@@ -587,6 +587,35 @@ public struct ResellerOrdersAndDepositsTabView: View {
             }
             .pickerStyle(.segmented)
             .padding(16)
+
+            if section == 1 {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Reseller Balance Top-Up")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.accentColor)
+                    Text("Deposits and balance top-ups are securely processed through our web portal. Cryptocurrency (USDT, BTC) and Credit Cards supported.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                        HStack {
+                            Image(systemName: "globe")
+                            Text("https://www.hushtunnel.com")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(10)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(14)
+                .background(Color(uiColor: .systemBackground))
+                .cornerRadius(14)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
 
             if section == 0 {
                 List(orders) { order in
