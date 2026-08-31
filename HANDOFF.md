@@ -1,3 +1,17 @@
+⚠️ **2026-08-31: read `/Users/atamohammadi/Dev/vpn/HANDOFF.md` FIRST** — it has
+the current session status (the Connect/Disconnect button was just rewired
+from a complete UI mock to real `ExtensionProfile` calls, on the `dev`
+branch, real-device-unverified), a live P1 bug report from the Android app
+(same underlying VPN-connectivity class of issue — check if iOS shares it),
+and the full new-feature backlog: reseller password choice + copy-confirm
+flow, clickable customer detail pages (this app already has
+`ResellerCustomerDetailSheetView` — check its current coverage before
+rebuilding), **sub-reseller management — this app's `ResellerHomeView` tab
+list has no sub-reseller tab, same gap as Android**, Farsi localization
+gaps, currency localization. This file below is the older architecture/
+feature reference, still accurate for background, but the ecosystem
+HANDOFF.md is where the current task list lives.
+
 # HushTunnel iOS Client — Architecture & Handoff Specification
 
 This is the comprehensive handoff and architectural specification for the **HushTunnel iOS Client** (`~/Dev/vpn-ios-client`).
