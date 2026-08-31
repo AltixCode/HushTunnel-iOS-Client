@@ -6,7 +6,7 @@ final class UITests: XCTestCase {
     }
 
     @MainActor
-    func testEndToEndShadowLinkFlow() throws {
+    func testEndToEndHushTunnelFlow() throws {
         let app = XCUIApplication()
         app.launch()
 

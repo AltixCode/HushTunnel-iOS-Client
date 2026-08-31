@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 
-public enum ShadowLinkLanguage: String, CaseIterable, Identifiable {
+public enum HushTunnelLanguage: String, CaseIterable, Identifiable {
     case english = "en"
     case persian = "fa"
     case russian = "ru"
@@ -30,7 +30,7 @@ public enum ShadowLinkLanguage: String, CaseIterable, Identifiable {
 public final class LanguageManager: ObservableObject {
     public static let shared = LanguageManager()
 
-    @Published public var currentLanguage: ShadowLinkLanguage = .english {
+    @Published public var currentLanguage: HushTunnelLanguage = .english {
         didSet {
             UserDefaults.standard.set(currentLanguage.rawValue, forKey: "app_language")
         }
@@ -42,20 +42,20 @@ public final class LanguageManager: ObservableObject {
 
     private init() {
         let saved = UserDefaults.standard.string(forKey: "app_language") ?? "en"
-        self.currentLanguage = ShadowLinkLanguage(rawValue: saved) ?? .english
+        self.currentLanguage = HushTunnelLanguage(rawValue: saved) ?? .english
     }
 
-    public func setLanguage(_ lang: ShadowLinkLanguage) {
+    public func setLanguage(_ lang: HushTunnelLanguage) {
         self.currentLanguage = lang
     }
 
     public func tr(_ key: String) -> String {
-        return ShadowLinkStrings.get(key, lang: currentLanguage)
+        return HushTunnelStrings.get(key, lang: currentLanguage)
     }
 }
 
-public struct ShadowLinkStrings {
-    private static let translations: [ShadowLinkLanguage: [String: String]] = [
+public struct HushTunnelStrings {
+    private static let translations: [HushTunnelLanguage: [String: String]] = [
         .english: [
             "auth.login": "Log in",
             "auth.register": "Sign up",
@@ -313,7 +313,7 @@ public struct ShadowLinkStrings {
         ]
     ]
 
-    public static func get(_ key: String, lang: ShadowLinkLanguage) -> String {
+    public static func get(_ key: String, lang: HushTunnelLanguage) -> String {
         return translations[lang]?[key] ?? translations[.english]?[key] ?? key
     }
 }

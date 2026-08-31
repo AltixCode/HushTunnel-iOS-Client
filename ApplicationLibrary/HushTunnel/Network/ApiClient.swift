@@ -31,7 +31,7 @@ public final class ApiClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        let tokenToUse = token ?? UserDefaults.standard.string(forKey: "com.shadowlink.auth.token")
+        let tokenToUse = token ?? UserDefaults.standard.string(forKey: "com.hushtunnel.auth.token")
         if let tokenToUse = tokenToUse, !tokenToUse.isEmpty {
             request.setValue("Bearer \(tokenToUse)", forHTTPHeaderField: "Authorization")
         }
@@ -55,7 +55,7 @@ public final class ApiClient: Sendable {
                 throw apiError
             }
             throw NSError(
-                domain: "ShadowLinkAPI",
+                domain: "HushTunnelAPI",
                 code: httpResponse.statusCode,
                 userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode): Request failed"]
             )

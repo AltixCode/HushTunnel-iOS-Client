@@ -131,7 +131,7 @@ public struct ResellerHomeView: View {
                 }
             }
             .confirmationDialog(lang.tr("common.language"), isPresented: $showLanguagePicker, titleVisibility: .visible) {
-                ForEach(ShadowLinkLanguage.allCases) { l in
+                ForEach(HushTunnelLanguage.allCases) { l in
                     Button(l.displayName) {
                         lang.setLanguage(l)
                     }

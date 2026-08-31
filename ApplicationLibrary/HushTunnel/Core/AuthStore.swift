@@ -11,9 +11,9 @@ public final class AuthStore: ObservableObject {
     @Published public private(set) var role: String?
     @Published public private(set) var isAuthenticated: BooleanLiteralType = false
 
-    private let tokenKey = "com.shadowlink.auth.token"
-    private let emailKey = "com.shadowlink.auth.email"
-    private let roleKey = "com.shadowlink.auth.role"
+    private let tokenKey = "com.hushtunnel.auth.token"
+    private let emailKey = "com.hushtunnel.auth.email"
+    private let roleKey = "com.hushtunnel.auth.role"
 
     private init() {
         loadSession()

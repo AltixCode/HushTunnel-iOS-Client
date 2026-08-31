@@ -1,6 +1,6 @@
-# ShadowLink iOS Client — Architecture & Handoff Specification
+# HushTunnel iOS Client — Architecture & Handoff Specification
 
-This is the comprehensive handoff and architectural specification for the **ShadowLink iOS Client** (`~/Dev/vpn-ios-client`).
+This is the comprehensive handoff and architectural specification for the **HushTunnel iOS Client** (`~/Dev/vpn-ios-client`).
 
 ---
 
@@ -20,7 +20,7 @@ This is the comprehensive handoff and architectural specification for the **Shad
 ```
 vpn-ios-client/
 ├── ApplicationLibrary/
-│   ├── ShadowLink/
+│   ├── HushTunnel/
 │   │   ├── Core/
 │   │   │   ├── BrandConfig.swift        # App identity, URLs, AppGroup
 │   │   │   ├── AuthStore.swift          # Session persistence (token, email, role)
