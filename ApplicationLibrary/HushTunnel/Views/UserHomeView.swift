@@ -1,14 +1,15 @@
+import Library
 import SwiftUI
 
 public struct UserHomeView: View {
     @ObservedObject var authStore = AuthStore.shared
     @ObservedObject var lang = LanguageManager.shared
+    @EnvironmentObject private var environments: ExtensionEnvironments
 
     @State private var meResult: MeResult?
     @State private var isLoading = false
-    @State private var isConnected = false
-    @State private var isConnecting = false
     @State private var errorMessage: String?
+    @State private var provisionError: String?
 
     @State private var showOrdersSheet = false
     @State private var showLanguagePicker = false
@@ -47,44 +48,32 @@ public struct UserHomeView: View {
                     VStack(spacing: 20) {
                         // Status & Connect Section
                         VStack(spacing: 24) {
-                            // Circular Connect Button
-                            Button(action: toggleConnection) {
+                            if let profile = environments.extensionProfile {
+                                ConnectCircleButton(profile: profile)
+                                    .padding(.top, 24)
+                                ConnectStatusLabel(profile: profile)
+                            } else {
+                                // No VPN extension registered yet (first launch, or
+                                // still installing) — same disabled fallback
+                                // StartStopButton uses elsewhere in the app.
                                 ZStack {
                                     Circle()
-                                        .fill(isConnected ? Color.green : (isConnecting ? Color.orange : Color.accentColor))
+                                        .fill(Color.gray.opacity(0.4))
                                         .frame(width: 140, height: 140)
-                                        .shadow(color: (isConnected ? Color.green : Color.accentColor).opacity(0.35), radius: 20, x: 0, y: 10)
-
-                                    VStack(spacing: 6) {
-                                        if isConnecting {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                .scaleEffect(1.4)
-                                        } else {
-                                            Image(systemName: isConnected ? "lock.shield.fill" : "power")
-                                                .font(.system(size: 36, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
-
-                                        Text(isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.disconnect") : lang.tr("vpn.connect")))
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                    }
+                                    ProgressView()
                                 }
-                            }
-                            .padding(.top, 24)
-
-                            // Status Label
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(isConnected ? Color.green : (isConnecting ? Color.orange : Color.gray))
-                                    .frame(width: 10, height: 10)
-
-                                Text(isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.connected") : lang.tr("vpn.disconnected")))
+                                .padding(.top, 24)
+                                Text(lang.tr("vpn.disconnected"))
                                     .font(.subheadline)
-                                    .fontWeight(.medium)
                                     .foregroundColor(.secondary)
+                            }
+
+                            if let provisionError {
+                                Text(provisionError)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 20)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -317,35 +306,21 @@ public struct UserHomeView: View {
             .sheet(isPresented: $showOrdersSheet) {
                 OrdersListView()
             }
+            .task {
+                await environments.reload()
+            }
             .onAppear(perform: refreshData)
         }
     }
 
     private func switchServer(to newServer: ServerNodeItem) {
+        // Selecting a display server here only affects which server the
+        // "Server Location" card shows — the sing-box config from the backend
+        // already lists every active server node as its own outbound. Making
+        // this actually re-route the live tunnel to a specific one would mean
+        // rewriting the profile's route.final to that server's tag and calling
+        // updateRemoteProfile()/restart(); not wired yet.
         selectedServer = newServer
-        if isConnected {
-            isConnecting = true
-            isConnected = false
-            Task {
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                await MainActor.run {
-                    self.isConnected = true
-                    self.isConnecting = false
-                }
-            }
-        }
-    }
-
-    private func toggleConnection() {
-        if isConnected {
-            isConnected = false
-        } else {
-            isConnecting = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                isConnecting = false
-                isConnected = true
-            }
-        }
     }
 
     private func refreshData() {
@@ -356,6 +331,16 @@ public struct UserHomeView: View {
                 await MainActor.run {
                     self.meResult = meRes
                     self.isLoading = false
+                }
+                if let activeSub = meRes.subscriptions.first(where: { $0.isActive }) {
+                    do {
+                        try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl)
+                        await MainActor.run { self.provisionError = nil }
+                    } catch {
+                        await MainActor.run {
+                            self.provisionError = "Couldn't set up your VPN connection: \(error.localizedDescription)"
+                        }
+                    }
                 }
             } catch {
                 await MainActor.run {

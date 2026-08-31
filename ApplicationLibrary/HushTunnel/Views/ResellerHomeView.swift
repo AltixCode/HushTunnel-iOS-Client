@@ -1,13 +1,21 @@
+import Library
 import SwiftUI
 
 public struct ResellerHomeView: View {
     @ObservedObject var authStore = AuthStore.shared
     @ObservedObject var lang = LanguageManager.shared
+    @EnvironmentObject private var environments: ExtensionEnvironments
 
     @State private var selectedTab = 0
     @State private var overview: ResellerOverview?
     @State private var customers: [ResellerCustomer] = []
     @State private var subscriptions: [ResellerSubscription] = []
+    // The reseller's own personal subscription, fetched the same way a plain
+    // USER account's is (/api/mobile/me) — ResellerSubscription (from
+    // /api/mobile/reseller/subscriptions) covers only *customers'*
+    // subscriptions and has no subscriptionUrl to provision a VPN connection
+    // from. Mirrors the Android fork's ResellerHomeViewModel.refresh().
+    @State private var personalSubscriptions: [SubscriptionInfo] = []
     @State private var orders: [ResellerOrder] = []
     @State private var deposits: [ResellerDeposit] = []
     @State private var plans: [PlanInfo] = []
@@ -17,8 +25,7 @@ public struct ResellerHomeView: View {
     @State private var showServerPickerSheet = false
 
     @State private var isLoading = false
-    @State private var isConnected = false
-    @State private var isConnecting = false
+    @State private var provisionError: String?
     @State private var statusMessage: String?
     @State private var errorMessage: String?
 
@@ -40,12 +47,11 @@ public struct ResellerHomeView: View {
                 // Tab 0: Personal VPN
                 ResellerPersonalVpnTabView(
                     overview: overview,
-                    personalSub: subscriptions.first(where: { $0.isSelf == true }),
+                    personalSub: personalSubscriptions.first(where: { $0.isActive }),
+                    extensionProfile: environments.extensionProfile,
+                    provisionError: provisionError,
                     servers: servers,
                     selectedServer: selectedServer,
-                    isConnected: isConnected,
-                    isConnecting: isConnecting,
-                    onToggleConnect: toggleConnection,
                     onOpenServerPicker: { showServerPickerSheet = true },
                     onCreateSelfSub: { showSelfSubSheet = true }
                 )
@@ -159,18 +165,10 @@ public struct ResellerHomeView: View {
                     servers: servers,
                     selectedServer: selectedServer,
                     onSelect: { s in
+                        // See UserHomeView.switchServer: only changes which
+                        // server the picker card shows, doesn't yet re-route
+                        // the live tunnel to that specific node.
                         selectedServer = s
-                        if isConnected {
-                            isConnecting = true
-                            isConnected = false
-                            Task {
-                                try? await Task.sleep(nanoseconds: 600_000_000)
-                                await MainActor.run {
-                                    self.isConnected = true
-                                    self.isConnecting = false
-                                }
-                            }
-                        }
                     }
                 )
             }
@@ -194,19 +192,10 @@ public struct ResellerHomeView: View {
                     })
                 }
             }
-            .onAppear(perform: refreshAll)
-        }
-    }
-
-    private func toggleConnection() {
-        if isConnected {
-            isConnected = false
-        } else {
-            isConnecting = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                isConnecting = false
-                isConnected = true
+            .task {
+                await environments.reload()
             }
+            .onAppear(perform: refreshAll)
         }
     }
 
@@ -217,22 +206,35 @@ public struct ResellerHomeView: View {
                 async let ovTask = ApiClient.shared.resellerOverview()
                 async let custTask = ApiClient.shared.resellerCustomers()
                 async let subTask = ApiClient.shared.resellerSubscriptions()
+                async let meTask = ApiClient.shared.me()
                 async let ordTask = ApiClient.shared.resellerOrders()
                 async let depTask = ApiClient.shared.resellerDeposits()
                 async let plTask = ApiClient.shared.plans()
                 async let gwTask = ApiClient.shared.gateways()
 
-                let (ov, cust, sub, ord, dep, pl, gw) = try await (ovTask, custTask, subTask, ordTask, depTask, plTask, gwTask)
+                let (ov, cust, sub, me, ord, dep, pl, gw) = try await (ovTask, custTask, subTask, meTask, ordTask, depTask, plTask, gwTask)
 
                 await MainActor.run {
                     self.overview = ov
                     self.customers = cust
                     self.subscriptions = sub
+                    self.personalSubscriptions = me.subscriptions
                     self.orders = ord
                     self.deposits = dep
                     self.plans = pl
                     self.gateways = gw
                     self.isLoading = false
+                }
+
+                if let activeSub = me.subscriptions.first(where: { $0.isActive }) {
+                    do {
+                        try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl)
+                        await MainActor.run { self.provisionError = nil }
+                    } catch {
+                        await MainActor.run {
+                            self.provisionError = "Couldn't set up your VPN connection: \(error.localizedDescription)"
+                        }
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -283,12 +285,11 @@ public struct ResellerHomeView: View {
 
 public struct ResellerPersonalVpnTabView: View {
     let overview: ResellerOverview?
-    let personalSub: ResellerSubscription?
+    let personalSub: SubscriptionInfo?
+    let extensionProfile: ExtensionProfile?
+    let provisionError: String?
     let servers: [ServerNodeItem]
     let selectedServer: ServerNodeItem?
-    let isConnected: Bool
-    let isConnecting: Bool
-    let onToggleConnect: () -> Void
     let onOpenServerPicker: () -> Void
     let onCreateSelfSub: () -> Void
     @ObservedObject var lang = LanguageManager.shared
@@ -296,33 +297,30 @@ public struct ResellerPersonalVpnTabView: View {
     public var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Connect Circle
-                Button(action: onToggleConnect) {
+                // Connect Circle — wired to the real ExtensionProfile the same
+                // way UserHomeView is; a reseller is also a customer of their
+                // own service and gets the same working connect/disconnect.
+                if let profile = extensionProfile {
+                    ConnectCircleButton(profile: profile)
+                        .padding(.top, 24)
+                    ConnectStatusLabel(profile: profile)
+                } else {
                     ZStack {
                         Circle()
-                            .fill(isConnected ? Color.green : (isConnecting ? Color.orange : Color.accentColor))
+                            .fill(Color.gray.opacity(0.4))
                             .frame(width: 140, height: 140)
-                            .shadow(color: (isConnected ? Color.green : Color.accentColor).opacity(0.35), radius: 20, x: 0, y: 10)
-
-                        VStack(spacing: 6) {
-                            if isConnecting {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.4)
-                            } else {
-                                Image(systemName: isConnected ? "lock.shield.fill" : "power")
-                                    .font(.system(size: 36, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-
-                            Text(isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.disconnect") : lang.tr("vpn.connect")))
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                        }
+                        ProgressView()
                     }
+                    .padding(.top, 24)
                 }
-                .padding(.top, 24)
+
+                if let provisionError {
+                    Text(provisionError)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                }
 
                 // Server Location Selector Card
                 Button(action: onOpenServerPicker) {
