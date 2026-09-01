@@ -117,6 +117,7 @@ jobs:
       - name: Build & Archive iOS App
         run: |
           mkdir -p build/output
+          VERSION="${{ env.APP_MARKETING_VERSION }}"
           
           if [ "$SIGNING_CONFIGURED" = "true" ]; then
             echo "Building with Code Signing for App Store / TestFlight..."
@@ -151,6 +152,9 @@ jobs:
               -exportPath build/output \
               -exportOptionsPlist build/exportOptions.plist
               
+            # Copy versioned IPA alias
+            cp build/output/HushTunnel.ipa build/output/HushTunnel-${VERSION}.ipa || true
+              
           else
             echo "Building iOS App Bundle (Unsigned/Simulator)..."
             xcodebuild build \
@@ -167,7 +171,7 @@ jobs:
             cp -r build/DerivedData/Build/Products/Release-iphoneos/HushTunnel.app build/output/Payload/ || \
             cp -r build/DerivedData/Build/Products/*-iphoneos/*.app build/output/Payload/ || true
             
-            cd build/output && zip -r HushTunnel.ipa Payload && cd ../..
+            cd build/output && zip -q -r HushTunnel.ipa Payload && cp HushTunnel.ipa HushTunnel-${VERSION}.ipa && cd ../..
           fi
 
       - name: Upload to App Store Connect / TestFlight
@@ -207,27 +211,62 @@ jobs:
           fi
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
+      - name: Generate Dynamic Release Notes
+        run: |
+          VERSION="${{ env.APP_MARKETING_VERSION }}"
+          TAG="${{ steps.tag_info.outputs.TAG_NAME }}"
+          BUILD="${{ env.APP_BUILD_NUMBER }}"
+
+          # Generate SHA256 checksums
+          cd build/output
+          shasum -a 256 *.ipa > SHA256SUMS.txt 2>/dev/null || sha256sum *.ipa > SHA256SUMS.txt 2>/dev/null || true
+          cd ../..
+
+          # Extract recent changelog
+          CHANGELOG=$(git log --pretty=format:"* %s (%h)" -n 12)
+
+          cat << 'HEADER_EOF' > RELEASE_NOTES.md
+          ## 🛡️ HushTunnel iOS ${TAG} (Build ${BUILD})
+
+          ### 🚀 What's New & Key Highlights
+          - **Multi-Server Location Switching**: Instant interactive server node switcher with dynamic latency checks.
+          - **Reseller Self-Service Suite**: Comprehensive customer creation with auto-generated/custom passwords, credential copy modal, and order creation handoff.
+          - **Double-Entry Transactions Ledger**: Real-time balance debits/credits history, order tracking, and P2P audit logs.
+          - **Full Localization (5 Languages)**: English, Persian (Farsi RTL), Russian, Simplified Chinese, and Turkish.
+          - **App Store Review Compliance**: Multi-device account management text linking directly to official control plane at [hushtunnel.com](https://www.hushtunnel.com) (Guideline 3.1.1 compliant).
+
+          ### 📦 Download Packages
+          | Package | Description | Target Deployment |
+          |---|---|---|
+          | **`HushTunnel-${VERSION}.ipa`** (`HushTunnel.ipa`) | Packaged iOS Application Archive | TestFlight / Enterprise / Sideloading (iOS 15.0+) |
+
+          ### 📝 Recent Changes
+          HEADER_EOF
+
+          echo "$CHANGELOG" >> RELEASE_NOTES.md
+          echo "" >> RELEASE_NOTES.md
+          echo "### 🔒 Binary Integrity (SHA-256)" >> RELEASE_NOTES.md
+          echo '```text' >> RELEASE_NOTES.md
+          cat build/output/SHA256SUMS.txt >> RELEASE_NOTES.md
+          echo '```' >> RELEASE_NOTES.md
+
+          # Replace environment variables in generated file
+          sed -i '' "s/\${TAG}/$TAG/g" RELEASE_NOTES.md
+          sed -i '' "s/\${BUILD}/$BUILD/g" RELEASE_NOTES.md
+          sed -i '' "s/\${VERSION}/$VERSION/g" RELEASE_NOTES.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         if: (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') && github.ref != 'refs/heads/dev'
         with:
           tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
           name: ${{ inputs.release_title || steps.tag_info.outputs.TAG_NAME }}
-          body: |
-            ## HushTunnel iOS Release (${{ steps.tag_info.outputs.TAG_NAME }})
-
-            ### What's New:
-            - **Multi-Server Location Switching**: Instant interactive server node switcher.
-            - **SaaS Store Compliance**: Multi-device account management text linking to `https://www.hushtunnel.com`.
-            - **Reseller Self-Service Suite**: Complete administrative customer management and password recovery.
-            - **Full Localization**: English, Persian (RTL), Russian, Simplified Chinese, and Turkish.
-
-            ### Package:
-            - **`HushTunnel.ipa`**: Packaged iOS application archive for TestFlight and direct enterprise/ad-hoc deployment.
+          body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false
           files: |
             build/output/*.ipa
             build/output/HushTunnel.ipa
+            build/output/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
