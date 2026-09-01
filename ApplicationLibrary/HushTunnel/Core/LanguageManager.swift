@@ -91,6 +91,7 @@ public struct HushTunnelStrings {
             "vpn.renew": "Renew Subscription",
             "vpn.noSub": "No active VPN connection",
             "vpn.noSubDesc": "Select a plan below to activate your high-speed VLESS connection.",
+            "vpn.qrCode": "QR Code",
             "orders.title": "Order History",
             "reseller.portal": "Reseller Portal",
             "reseller.balance": "Prepaid Balance",

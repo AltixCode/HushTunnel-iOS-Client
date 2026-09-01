@@ -357,6 +357,8 @@ public struct UserHomeView: View {
 public struct SubscriptionCardView: View {
     let sub: SubscriptionInfo
     @ObservedObject var lang = LanguageManager.shared
+    @State private var showQRCode = false
+    @State private var showCopiedFeedback = false
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -418,11 +420,56 @@ public struct SubscriptionCardView: View {
                     }
                 }
             }
+
+            // Connection String Actions
+            if sub.isActive {
+                HStack(spacing: 10) {
+                    Button {
+                        UIPasteboard.general.string = sub.subscriptionUrl
+                        withAnimation { showCopiedFeedback = true }
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            await MainActor.run { withAnimation { showCopiedFeedback = false } }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                            Text(showCopiedFeedback ? lang.tr("common.copied") : lang.tr("common.copy"))
+                        }
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        showQRCode = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "qrcode")
+                            Text(lang.tr("vpn.qrCode"))
+                        }
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(18)
         .background(Color(uiColor: .systemBackground))
         .cornerRadius(18)
         .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+        .sheet(isPresented: $showQRCode) {
+            URLQRCodeSheet(url: sub.subscriptionUrl, title: sub.planName)
+        }
     }
 
     private func formattedExpiry(_ dateString: String) -> String {

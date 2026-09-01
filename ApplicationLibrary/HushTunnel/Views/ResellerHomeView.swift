@@ -1276,12 +1276,15 @@ public struct ResellerDepositSheetView: View {
 public struct ResellerCustomerDetailSheetView: View {
     let customer: ResellerCustomer
     let onDeleted: () -> Void
+    @ObservedObject var lang = LanguageManager.shared
     @Environment(\.dismiss) var dismiss
     @State private var detail: ResellerCustomerDetail?
     @State private var newPasswordInput = ""
     @State private var generatedPasswordResult: String?
     @State private var isProcessing = false
     @State private var errorMessage: String?
+    @State private var subscriptionForQR: SubscriptionInfo?
+    @State private var copiedSubscriptionId: String?
 
     public var body: some View {
         NavigationView {
@@ -1295,9 +1298,38 @@ public struct ResellerCustomerDetailSheetView: View {
                 Section(header: Text("Active Subscriptions")) {
                     if let subs = detail?.subscriptions, !subs.isEmpty {
                         ForEach(subs) { s in
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 Text(s.planName).fontWeight(.medium)
                                 Text("Expires: \(s.expiryDate.prefix(10))").font(.caption).foregroundColor(.secondary)
+
+                                HStack(spacing: 12) {
+                                    Button {
+                                        UIPasteboard.general.string = s.subscriptionUrl
+                                        copiedSubscriptionId = s.id
+                                        Task {
+                                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                            await MainActor.run {
+                                                if copiedSubscriptionId == s.id { copiedSubscriptionId = nil }
+                                            }
+                                        }
+                                    } label: {
+                                        Label(
+                                            copiedSubscriptionId == s.id ? lang.tr("common.copied") : lang.tr("common.copy"),
+                                            systemImage: copiedSubscriptionId == s.id ? "checkmark" : "doc.on.doc"
+                                        )
+                                        .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+
+                                    Button {
+                                        subscriptionForQR = s
+                                    } label: {
+                                        Label(lang.tr("vpn.qrCode"), systemImage: "qrcode")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding(.top, 2)
                             }
                         }
                     } else {
@@ -1339,6 +1371,9 @@ public struct ResellerCustomerDetailSheetView: View {
                         await MainActor.run { detail = d }
                     }
                 }
+            }
+            .sheet(item: $subscriptionForQR) { s in
+                URLQRCodeSheet(url: s.subscriptionUrl, title: s.planName)
             }
         }
     }
