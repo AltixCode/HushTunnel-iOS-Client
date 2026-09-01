@@ -9,11 +9,28 @@ public final class ApiClient: Sendable {
 
     private let session: URLSession
 
+
+private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        var redirectedRequest = request
+        if let originalAuth = task.originalRequest?.value(forHTTPHeaderField: "Authorization") {
+            redirectedRequest.setValue(originalAuth, forHTTPHeaderField: "Authorization")
+        }
+        completionHandler(redirectedRequest)
+    }
+}
+
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 20
         config.timeoutIntervalForResource = 30
-        self.session = URLSession(configuration: config)
+        self.session = URLSession(configuration: config, delegate: RedirectDelegate(), delegateQueue: nil)
     }
 
     private func makeRequest(
