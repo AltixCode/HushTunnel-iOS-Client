@@ -209,6 +209,23 @@ public struct ResellerSubscriptionsResponse: Codable {
     public let subscriptions: [ResellerSubscription]
 }
 
+public struct WalletTransactionItem: Codable, Identifiable, Hashable {
+    public let id: String
+    public let type: String
+    public let amountUsd: Double
+    public let balanceBefore: Double
+    public let balanceAfter: Double
+    public let description: String?
+    public let counterpartEmail: String?
+    public let createdAt: String
+}
+
+public struct WalletTransactionsResponse: Codable {
+    public let success: Bool
+    public let balanceUsd: Double
+    public let transactions: [WalletTransactionItem]
+}
+
 public struct ResellerDeposit: Codable, Identifiable, Hashable {
     public let id: String
     public let amountUsd: Double

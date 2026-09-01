@@ -222,6 +222,12 @@ public final class ApiClient: Sendable {
         let _: SimpleSuccessResponse = try await perform(request)
     }
 
+    public func walletTransactions() async throws -> [WalletTransactionItem] {
+        let request = try makeRequest(path: "/api/mobile/wallet/transactions")
+        let res: WalletTransactionsResponse = try await perform(request)
+        return res.transactions
+    }
+
     public func resellerDeposits() async throws -> [ResellerDeposit] {
         let request = try makeRequest(path: "/api/mobile/reseller/deposits")
         let res: ResellerDepositsResponse = try await perform(request)

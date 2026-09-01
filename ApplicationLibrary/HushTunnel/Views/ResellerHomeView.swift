@@ -18,6 +18,7 @@ public struct ResellerHomeView: View {
     @State private var personalSubscriptions: [SubscriptionInfo] = []
     @State private var orders: [ResellerOrder] = []
     @State private var deposits: [ResellerDeposit] = []
+    @State private var transactions: [WalletTransactionItem] = []
     @State private var subResellers: [SubReseller] = []
     @State private var plans: [PlanInfo] = []
     @State private var gateways = GatewayInfo()
@@ -103,11 +104,10 @@ public struct ResellerHomeView: View {
                 }
                 .tag(3)
 
-                // Tab 4: Orders & Deposits
-                ResellerOrdersAndDepositsTabView(
+                // Tab 4: Orders & Transactions
+                ResellerOrdersAndTransactionsTabView(
                     orders: orders,
-                    deposits: deposits,
-                    onAddDeposit: { showDepositSheet = true }
+                    transactions: transactions
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.orders"), systemImage: "list.bullet.rectangle.portrait.fill")
@@ -657,85 +657,128 @@ public struct ResellerSubscriptionsTabView: View {
 
 // MARK: - Tab 4: Orders and Deposits Tab
 
-public struct ResellerOrdersAndDepositsTabView: View {
+public struct ResellerOrdersAndTransactionsTabView: View {
     let orders: [ResellerOrder]
-    let deposits: [ResellerDeposit]
-    let onAddDeposit: () -> Void
+    let transactions: [WalletTransactionItem]
     @State private var section = 0
+    @State private var searchText = ""
+
+    var filteredTransactions: [WalletTransactionItem] {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return transactions
+        }
+        let q = searchText.lowercased()
+        return transactions.filter {
+            ($0.description ?? "").lowercased().contains(q) ||
+            $0.type.lowercased().contains(q) ||
+            ($0.counterpartEmail ?? "").lowercased().contains(q)
+        }
+    }
 
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $section) {
                 Text("Orders (\(orders.count))").tag(0)
-                Text("Deposits (\(deposits.count))").tag(1)
+                Text("Transactions (\(transactions.count))").tag(1)
             }
             .pickerStyle(.segmented)
             .padding(16)
 
-            if section == 1 {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Reseller Balance Top-Up")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.accentColor)
-                    Text("Deposits and balance top-ups are securely processed through our web portal. Cryptocurrency (USDT, BTC) and Credit Cards supported.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Link(destination: URL(string: "https://www.hushtunnel.com")!) {
-                        HStack {
-                            Image(systemName: "globe")
-                            Text("https://www.hushtunnel.com")
-                                .fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(10)
-                        .background(Color.accentColor.opacity(0.12))
-                        .foregroundColor(.accentColor)
-                        .cornerRadius(8)
-                    }
-                }
-                .padding(14)
-                .background(Color(uiColor: .systemBackground))
-                .cornerRadius(14)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-            }
-
             if section == 0 {
-                List(orders) { order in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(order.customerEmail)
-                                .fontWeight(.medium)
-                            Text("\(order.planName) · \(order.createdAt.prefix(10))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                if orders.isEmpty {
+                    VStack(spacing: 12) {
                         Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("$\(String(format: "%.2f", order.amountUsd))")
-                                .fontWeight(.bold)
-                            Text(order.status)
-                                .font(.caption2)
-                                .foregroundColor(order.status == "PAID" ? .green : .orange)
+                        Image(systemName: "cart")
+                            .font(.system(size: 44))
+                            .foregroundColor(.secondary)
+                        Text("No orders placed yet.")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                } else {
+                    List(orders) { order in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(order.customerEmail)
+                                    .fontWeight(.medium)
+                                Text("\(order.planName) · \(order.createdAt.prefix(10))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("$\(String(format: "%.2f", order.amountUsd))")
+                                    .fontWeight(.bold)
+                                Text(order.status)
+                                    .font(.caption2)
+                                    .foregroundColor(order.status == "PAID" ? .green : .orange)
+                            }
                         }
                     }
                 }
             } else {
-                List(deposits) { dep in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("$\(String(format: "%.2f", dep.amountUsd)) via \(dep.gateway)")
-                                .fontWeight(.medium)
-                            Text(dep.createdAt.prefix(10))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                if transactions.isEmpty {
+                    VStack(spacing: 12) {
                         Spacer()
-                        Text(dep.status)
-                            .font(.caption2)
-                            .foregroundColor(dep.status == "PAID" ? .green : .orange)
+                        Image(systemName: "list.bullet.rectangle.portrait")
+                            .font(.system(size: 44))
+                            .foregroundColor(.secondary)
+                        Text("No transactions found.")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
+                } else {
+                    List(filteredTransactions) { tx in
+                        let isCredit = tx.type == "TRANSFER_IN" || tx.type == "DEPOSIT" || (tx.amountUsd > 0 && tx.balanceAfter > tx.balanceBefore)
+                        let sign = isCredit ? "+" : "-"
+                        let color: Color = isCredit ? .green : .red
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(tx.type.replacingOccurrences(of: "_", with: " "))
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.accentColor.opacity(0.12))
+                                    .foregroundColor(.accentColor)
+                                    .cornerRadius(4)
+
+                                Spacer()
+
+                                Text("\(sign)$\(String(format: "%.2f", tx.amountUsd))")
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(color)
+                            }
+
+                            if let desc = tx.description, !desc.isEmpty {
+                                Text(desc)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+
+                            if let email = tx.counterpartEmail, !email.isEmpty {
+                                Text("Counterpart: \(email)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            HStack {
+                                Text("$\(String(format: "%.2f", tx.balanceBefore)) → $\(String(format: "%.2f", tx.balanceAfter))")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text(String(tx.createdAt.prefix(16)).replacingOccurrences(of: "T", with: " "))
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .searchable(text: $searchText, prompt: "Search transactions...")
                 }
             }
         }
