@@ -23,8 +23,12 @@ public enum ProvisionHelper {
     /// pattern as `NewProfileViewModel.createProfileBackground()`'s `.remote`
     /// branch — reusing the app's own real, existing profile pipeline rather
     /// than a bespoke one.
-    public static func provisionSubscription(subscriptionUrl: String) async throws {
-        guard let remoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "sing-box") else {
+    public static func provisionSubscription(subscriptionUrl: String, preferredServerId: String? = nil) async throws {
+        var baseRemoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "sing-box")
+        if let preferred = preferredServerId, !preferred.isEmpty {
+            baseRemoteURL = baseRemoteURL?.appendingQueryItem(name: "server", value: preferred)
+        }
+        guard let remoteURL = baseRemoteURL else {
             throw NSError(domain: "ProvisionHelper", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid subscription URL"])
         }
 

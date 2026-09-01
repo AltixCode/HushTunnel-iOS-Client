@@ -178,10 +178,19 @@ public struct ResellerHomeView: View {
                     servers: servers,
                     selectedServer: selectedServer,
                     onSelect: { s in
-                        // See UserHomeView.switchServer: only changes which
-                        // server the picker card shows, doesn't yet re-route
-                        // the live tunnel to that specific node.
                         selectedServer = s
+                        Task {
+                            if let activeSub = activePersonalSub {
+                                do {
+                                    try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl, preferredServerId: s.id)
+                                    if environments.extensionProfile?.status == .connected {
+                                        try await environments.extensionProfile?.restart()
+                                    }
+                                } catch {
+                                    print("Error switching server: \(error)")
+                                }
+                            }
+                        }
                     }
                 )
             }

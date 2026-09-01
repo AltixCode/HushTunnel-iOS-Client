@@ -314,13 +314,19 @@ public struct UserHomeView: View {
     }
 
     private func switchServer(to newServer: ServerNodeItem) {
-        // Selecting a display server here only affects which server the
-        // "Server Location" card shows — the sing-box config from the backend
-        // already lists every active server node as its own outbound. Making
-        // this actually re-route the live tunnel to a specific one would mean
-        // rewriting the profile's route.final to that server's tag and calling
-        // updateRemoteProfile()/restart(); not wired yet.
         selectedServer = newServer
+        Task {
+            if let activeSub = meResult?.subscriptions.first(where: { $0.isActive }) {
+                do {
+                    try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl, preferredServerId: newServer.id)
+                    if environments.extensionProfile?.status == .connected {
+                        try await environments.extensionProfile?.restart()
+                    }
+                } catch {
+                    print("Error switching server: \(error)")
+                }
+            }
+        }
     }
 
     private func refreshData() {
