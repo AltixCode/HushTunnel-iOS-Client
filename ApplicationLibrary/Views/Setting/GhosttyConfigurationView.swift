@@ -1,4 +1,4 @@
-#if !os(tvOS)
+#if !os(tvOS) && canImport(GhosttyTerminal)
     import Library
     import SwiftUI
 
@@ -41,9 +41,9 @@
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
             #endif
-                .onAppear {
-                    reload()
-                }
+            .onAppear {
+                reload()
+            }
         }
 
         private func fontSection() -> some View {
@@ -55,92 +55,72 @@
                         }
                     }
                 if !fontFollowTheme {
-                    FormNavigationLink {
-                        FontPickerView(currentName: fontFamily) { newName in
+                    TextField("Font Family", text: $fontFamily)
+                        .onChangeCompat(of: fontFamily) { newValue in
                             Task {
-                                await SharedPreferences.tailscaleSSHTerminalFontFamily.set(newName)
-                                fontFamily = newName
+                                await SharedPreferences.tailscaleSSHTerminalFontFamily.set(newValue)
                             }
                         }
-                    } label: {
-                        HStack {
-                            Text("Font")
-                            Spacer()
-                            Text(fontFamily.isEmpty ? String(localized: "Follow Theme") : fontFamily)
-                                .foregroundStyle(.secondary)
+                    TextField("Font Size", value: $fontSize, formatter: NumberFormatter())
+                        .onChangeCompat(of: fontSize) { newValue in
+                            Task {
+                                await SharedPreferences.tailscaleSSHTerminalFontSize.set(newValue)
+                            }
                         }
-                    }
-                    Stepper(value: $fontSize, in: 8 ... 32, step: 1) {
-                        HStack {
-                            Text("Size")
-                            Spacer()
-                            Text(verbatim: "\(Int(fontSize))")
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .onChangeCompat(of: fontSize) { newValue in
-                        Task {
-                            await SharedPreferences.tailscaleSSHTerminalFontSize.set(newValue)
-                        }
-                    }
                 }
             }
         }
 
         private func schemeSection(
-            header: LocalizedStringKey,
+            header: String,
             isDark: Bool,
             pickerTheme: Binding<String>,
             customEnabled: Binding<Bool>,
-            themePreference: SharedPreferences.Preference<String>
+            themePreference: PreferenceKey<String>
         ) -> some View {
             Section(header: Text(header)) {
-                themeRow(isDark: isDark, pickerTheme: pickerTheme, themePreference: themePreference)
-                    .disabled(customEnabled.wrappedValue)
                 Toggle("Custom Configuration", isOn: customEnabled)
                     .onChangeCompat(of: customEnabled.wrappedValue) { newValue in
                         Task {
-                            await themePreference.set(newValue ? "" : pickerTheme.wrappedValue)
+                            if !newValue {
+                                await themePreference.set("")
+                            }
+                            reload()
                         }
                     }
                 if customEnabled.wrappedValue {
                     FormNavigationLink {
                         EditGhosttyConfigView(scheme: isDark ? .dark : .light)
                     } label: {
-                        Text("Edit Custom Configuration")
+                        Text("Edit Configuration")
                     }
+                } else {
+                    themePickerLink(
+                        isDark: isDark,
+                        pickerTheme: pickerTheme,
+                        themePreference: themePreference
+                    )
                 }
             }
         }
 
-        private func themeRow(
+        private func themePickerLink(
             isDark: Bool,
             pickerTheme: Binding<String>,
-            themePreference: SharedPreferences.Preference<String>
+            themePreference: PreferenceKey<String>
         ) -> some View {
             FormNavigationLink {
                 ThemePickerView(
                     scheme: isDark ? .dark : .light,
                     currentName: pickerTheme.wrappedValue
-                ) { newName in
-                    guard !newName.isEmpty else { return }
+                ) { newTheme in
+                    pickerTheme.wrappedValue = newTheme
                     Task {
-                        await themePreference.set(newName)
-                        pickerTheme.wrappedValue = newName
+                        await themePreference.set(newTheme)
                     }
                 }
             } label: {
-                themeRowLabel(value: pickerTheme.wrappedValue)
-            }
-        }
-
-        private func themeRowLabel(value: String) -> some View {
-            HStack {
-                Text("Theme")
-                Spacer()
-                Text(value)
-                    .foregroundStyle(.secondary)
+                Text("Theme: \(pickerTheme.wrappedValue)")
             }
         }
 
@@ -165,6 +145,15 @@
             fontFamily = SharedPreferences.tailscaleSSHTerminalFontFamily.getBlocking()
             fontSize = SharedPreferences.tailscaleSSHTerminalFontSize.getBlocking()
             isLoading = false
+        }
+    }
+#else
+    import SwiftUI
+
+    public struct GhosttyConfigurationView: View {
+        public init() {}
+        public var body: some View {
+            EmptyView()
         }
     }
 #endif

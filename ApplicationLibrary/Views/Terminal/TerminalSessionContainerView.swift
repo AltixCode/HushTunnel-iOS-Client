@@ -58,27 +58,25 @@
                     .keyboardShortcut("w", modifiers: .command)
                     .opacity(0)
                     .frame(width: 0, height: 0)
-                    .accessibilityHidden(true)
             )
-            .background(
-                Button(action: {
-                    sessionManager.createDuplicateSession()
-                }) {}
-                    .keyboardShortcut("n", modifiers: .command)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .accessibilityHidden(true)
-            )
-            .onAppear {
-                sessionManager.onDismissAll = { dismiss() }
-                sessionManager.addSession(from: initialSession)
+            .task {
+                if sessionManager.sessions.isEmpty {
+                    sessionManager.openSession(initialSession)
+                }
             }
-            .onDisappear {
-                sessionManager.disconnectAll()
+            .onChangeCompat(of: sessionManager.sessions.isEmpty) { isEmpty in
+                if isEmpty {
+                    dismiss()
+                }
+            }
+            .sheet(isPresented: $sessionManager.isMenuPresented) {
+                NavigationStackCompat {
+                    TerminalSessionMenuView(sessionManager: sessionManager)
+                }
             }
         }
 
-        private func setupCallbacks(for managed: TerminalSessionManager.ManagedSession) {
+        private func setupCallbacks(for managed: ManagedTerminalSession) {
             managed.viewModel.extras.onOpenURL = { urlString, _ in
                 guard let url = URL(string: urlString) else { return }
                 openURL(url)
@@ -128,5 +126,15 @@
                 return top
             }
         #endif
+    }
+#else
+    import Library
+    import SwiftUI
+
+    struct TerminalSessionContainerView: View {
+        init(_ initialSession: TailscaleSSHPresentedSession) {}
+        var body: some View {
+            EmptyView()
+        }
     }
 #endif
