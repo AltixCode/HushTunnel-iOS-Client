@@ -18,6 +18,7 @@ public struct ResellerHomeView: View {
     @State private var personalSubscriptions: [SubscriptionInfo] = []
     @State private var orders: [ResellerOrder] = []
     @State private var deposits: [ResellerDeposit] = []
+    @State private var subResellers: [SubReseller] = []
     @State private var plans: [PlanInfo] = []
     @State private var gateways = GatewayInfo()
     @State private var servers: [ServerNodeItem] = []
@@ -35,6 +36,7 @@ public struct ResellerHomeView: View {
     @State private var showAddCustomerSheet = false
     @State private var showCreateOrderSheet = false
     @State private var showDepositSheet = false
+    @State private var showAddSubResellerSheet = false
     @State private var showLanguagePicker = false
     @State private var selectedCustomerForDetail: ResellerCustomer?
     @State private var showCustomerDetailSheet = false
@@ -111,6 +113,16 @@ public struct ResellerHomeView: View {
                     Label(lang.tr("reseller.tab.orders"), systemImage: "list.bullet.rectangle.portrait.fill")
                 }
                 .tag(4)
+
+                // Tab 5: Sub-Resellers
+                ResellerSubResellersTabView(
+                    subResellers: subResellers,
+                    onAddSubReseller: { showAddSubResellerSheet = true }
+                )
+                .tabItem {
+                    Label(lang.tr("reseller.tab.subresellers"), systemImage: "person.3.fill")
+                }
+                .tag(5)
             }
             .environment(\.layoutDirection, lang.layoutDirection)
             .navigationTitle(BrandConfig.appName)
@@ -184,6 +196,9 @@ public struct ResellerHomeView: View {
             .sheet(isPresented: $showDepositSheet) {
                 ResellerDepositSheetView(gateways: gateways, onCompleted: refreshAll)
             }
+            .sheet(isPresented: $showAddSubResellerSheet) {
+                ResellerAddSubResellerSheetView(balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)
+            }
             .sheet(isPresented: $showCustomerDetailSheet) {
                 if let c = selectedCustomerForDetail {
                     ResellerCustomerDetailSheetView(customer: c, onDeleted: {
@@ -211,8 +226,9 @@ public struct ResellerHomeView: View {
                 async let depTask = ApiClient.shared.resellerDeposits()
                 async let plTask = ApiClient.shared.plans()
                 async let gwTask = ApiClient.shared.gateways()
+                async let subResTask = ApiClient.shared.resellerSubResellers()
 
-                let (ov, cust, sub, me, ord, dep, pl, gw) = try await (ovTask, custTask, subTask, meTask, ordTask, depTask, plTask, gwTask)
+                let (ov, cust, sub, me, ord, dep, pl, gw, subRes) = try await (ovTask, custTask, subTask, meTask, ordTask, depTask, plTask, gwTask, subResTask)
 
                 await MainActor.run {
                     self.overview = ov
@@ -223,6 +239,7 @@ public struct ResellerHomeView: View {
                     self.deposits = dep
                     self.plans = pl
                     self.gateways = gw
+                    self.subResellers = subRes
                     self.isLoading = false
                 }
 
@@ -719,6 +736,157 @@ public struct ResellerOrdersAndDepositsTabView: View {
                             .font(.caption2)
                             .foregroundColor(dep.status == "PAID" ? .green : .orange)
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Tab 5: Sub-Resellers Tab
+
+public struct ResellerSubResellersTabView: View {
+    let subResellers: [SubReseller]
+    let onAddSubReseller: () -> Void
+    @ObservedObject var lang = LanguageManager.shared
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: onAddSubReseller) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(16)
+
+            if subResellers.isEmpty {
+                Spacer()
+                Text(lang.tr("reseller.subresellers.empty"))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+            } else {
+                List(subResellers) { r in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(r.email)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text("$\(String(format: "%.2f", r.balanceUsd))")
+                                .fontWeight(.bold)
+                                .foregroundColor(.accentColor)
+                        }
+                        Text(String(format: lang.tr("reseller.subresellers.stats"), r.customerCount, r.subscriptionCount))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reseller Add Sub-Reseller Sheet
+
+public struct ResellerAddSubResellerSheetView: View {
+    let balance: Double
+    let onCompleted: () -> Void
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var lang = LanguageManager.shared
+    @State private var email = ""
+    @State private var initialBalanceText = "0"
+    @State private var isProcessing = false
+    @State private var createdPassword: String?
+    @State private var errorMessage: String?
+
+    private var initialBalance: Double { Double(initialBalanceText) ?? 0 }
+    private var overBudget: Bool { initialBalance > balance }
+
+    public var body: some View {
+        NavigationView {
+            Form {
+                if let pwd = createdPassword {
+                    Section(header: Text(lang.tr("reseller.addSubReseller"))) {
+                        Text("Share this password with the sub-reseller now:")
+                            .font(.caption)
+                        HStack {
+                            Text(pwd)
+                                .font(.system(.body, design: .monospaced))
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                            Spacer()
+                            Button(lang.tr("common.copy")) {
+                                UIPasteboard.general.string = pwd
+                            }
+                        }
+                    }
+                } else {
+                    Section {
+                        TextField("Sub-Reseller Email", text: $email)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+
+                        TextField(lang.tr("reseller.subresellers.initialBalance"), text: $initialBalanceText)
+                            .keyboardType(.decimalPad)
+
+                        Text("\(lang.tr("reseller.balance")): $\(String(format: "%.2f", balance))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if overBudget {
+                        Section { Text(lang.tr("reseller.insufficientBalance")).foregroundColor(.red).font(.caption) }
+                    }
+
+                    if let err = errorMessage {
+                        Section { Text(err).foregroundColor(.red).font(.caption) }
+                    }
+
+                    Section {
+                        Button(action: handleCreate) {
+                            HStack {
+                                Spacer()
+                                if isProcessing { ProgressView().padding(.trailing, 8) }
+                                Text(lang.tr("reseller.addSubReseller")).fontWeight(.bold)
+                                Spacer()
+                            }
+                        }
+                        .disabled(email.isEmpty || !email.contains("@") || isProcessing || overBudget)
+                    }
+                }
+            }
+            .navigationTitle(lang.tr("reseller.addSubReseller"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(createdPassword != nil ? lang.tr("common.done") : lang.tr("common.cancel")) {
+                        dismiss()
+                        if createdPassword != nil { onCompleted() }
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleCreate() {
+        isProcessing = true
+        errorMessage = nil
+        Task {
+            do {
+                let res = try await ApiClient.shared.createSubReseller(
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                    initialBalanceUsd: initialBalance
+                )
+                await MainActor.run {
+                    isProcessing = false
+                    createdPassword = res.generatedPassword
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessing = false
+                    errorMessage = error.localizedDescription
                 }
             }
         }

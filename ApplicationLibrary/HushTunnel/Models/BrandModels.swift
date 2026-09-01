@@ -230,6 +230,42 @@ public struct CreateDepositResponse: Codable {
     public let checkoutUrl: String?
 }
 
+public struct SubResellerCount: Codable, Hashable {
+    public let customers: Int
+    public let subscriptions: Int
+}
+
+public struct SubReseller: Codable, Identifiable, Hashable {
+    public let id: String
+    public let email: String
+    public let balanceUsd: Double
+    public let createdAt: String
+    public let count: SubResellerCount?
+
+    enum CodingKeys: String, CodingKey {
+        case id, email, balanceUsd, createdAt
+        case count = "_count"
+    }
+
+    public var customerCount: Int { count?.customers ?? 0 }
+    public var subscriptionCount: Int { count?.subscriptions ?? 0 }
+}
+
+public struct SubResellersResponse: Codable {
+    public let resellers: [SubReseller]
+}
+
+public struct CreateSubResellerResponse: Codable {
+    public let reseller: CreatedSubReseller
+}
+
+public struct CreatedSubReseller: Codable {
+    public let id: String
+    public let email: String
+    public let balanceUsd: Double
+    public let generatedPassword: String
+}
+
 // MARK: - API Error
 
 public struct ApiError: LocalizedError, Codable {

@@ -237,6 +237,22 @@ public final class ApiClient: Sendable {
         return try await perform(request)
     }
 
+    public func resellerSubResellers() async throws -> [SubReseller] {
+        let request = try makeRequest(path: "/api/mobile/reseller/resellers")
+        let res: SubResellersResponse = try await perform(request)
+        return res.resellers
+    }
+
+    public func createSubReseller(email: String, initialBalanceUsd: Double) async throws -> CreatedSubReseller {
+        let request = try makeRequest(
+            path: "/api/mobile/reseller/resellers",
+            method: "POST",
+            body: ["email": email, "initialBalanceUsd": initialBalanceUsd]
+        )
+        let res: CreateSubResellerResponse = try await perform(request)
+        return res.reseller
+    }
+
     public func changePassword(currentPassword: String?, newPassword: String) async throws {
         var body: [String: Any] = ["newPassword": newPassword]
         if let current = currentPassword, !current.isEmpty {
