@@ -732,9 +732,26 @@ public struct ResellerSubscriptionsTabView: View {
     let onResetTraffic: (String) -> Void
     let onRevoke: (String) -> Void
     var onSelectSub: ((ResellerSubscription) -> Void)? = nil
+    @State private var search = ""
+
+    private var filtered: [ResellerSubscription] {
+        if search.isEmpty { return subscriptions }
+        let q = search.lowercased()
+        return subscriptions.filter {
+            $0.customerEmail.lowercased().contains(q) ||
+            $0.planName.lowercased().contains(q)
+        }
+    }
 
     public var body: some View {
-        List(subscriptions) { sub in
+        VStack(spacing: 0) {
+            TextField("Search subscriptions...", text: $search)
+                .padding(10)
+                .background(Color(uiColor: .secondarySystemGroupedBackground))
+                .cornerRadius(10)
+                .padding(16)
+
+            List(filtered) { sub in
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
@@ -791,6 +808,7 @@ public struct ResellerSubscriptionsTabView: View {
             }
             .padding(.vertical, 6)
         }
+        }
     }
 }
 
@@ -805,6 +823,18 @@ public struct ResellerOrdersAndTransactionsTabView: View {
     @ObservedObject var lang = LanguageManager.shared
     @State private var section = 0
     @State private var searchText = ""
+
+    var filteredOrders: [ResellerOrder] {
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return orders
+        }
+        let q = searchText.lowercased()
+        return orders.filter {
+            $0.customerEmail.lowercased().contains(q) ||
+            $0.planName.lowercased().contains(q) ||
+            $0.status.lowercased().contains(q)
+        }
+    }
 
     var filteredTransactions: [WalletTransactionItem] {
         if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -840,7 +870,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                         Spacer()
                     }
                 } else {
-                    List(orders) { order in
+                    List(filteredOrders) { order in
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(order.customerEmail)
@@ -971,11 +1001,21 @@ public struct ResellerSubResellersTabView: View {
     var onSelectSubReseller: ((SubReseller) -> Void)? = nil
     var onAddFunds: ((SubReseller) -> Void)? = nil
     @ObservedObject var lang = LanguageManager.shared
+    @State private var search = ""
+
+    private var filtered: [SubReseller] {
+        if search.isEmpty { return subResellers }
+        return subResellers.filter { $0.email.localizedCaseInsensitiveContains(search) }
+    }
 
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Spacer()
+                TextField("Search sub-resellers...", text: $search)
+                    .padding(10)
+                    .background(Color(uiColor: .secondarySystemGroupedBackground))
+                    .cornerRadius(10)
+
                 Button(action: onAddSubReseller) {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
@@ -984,14 +1024,14 @@ public struct ResellerSubResellersTabView: View {
             }
             .padding(16)
 
-            if subResellers.isEmpty {
+            if filtered.isEmpty {
                 Spacer()
                 Text(lang.tr("reseller.subresellers.empty"))
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 Spacer()
             } else {
-                List(subResellers) { r in
+                List(filtered) { r in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -1070,6 +1110,8 @@ public struct ResellerAddSubResellerSheetView: View {
                         TextField("Sub-Reseller Email", text: $email)
                             .keyboardType(.emailAddress)
                             .autocapitalization(.none)
+
+                        EmailDomainChipsView(email: $email)
 
                         TextField(lang.tr("reseller.subresellers.initialBalance"), text: $initialBalanceText)
                             .keyboardType(.decimalPad)
@@ -1253,6 +1295,8 @@ public struct ResellerAddCustomerSheetView: View {
                             .keyboardType(.emailAddress)
                             .autocapitalization(.none)
 
+                        EmailDomainChipsView(email: $email)
+
                         SecureField("Custom Password (optional)", text: $customPassword)
                     }
 
@@ -1332,7 +1376,32 @@ public struct ResellerCreateOrderSheetView: View {
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
 
+                    EmailDomainChipsView(email: $email)
+
                     if !customers.isEmpty {
+                        let matching = customers.filter {
+                            email.isEmpty ? true : $0.email.lowercased().contains(email.lowercased())
+                        }
+                        if !matching.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(matching.prefix(4)) { c in
+                                        Button(action: { email = c.email }) {
+                                            Text(c.email)
+                                                .font(.caption2)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.accentColor.opacity(0.12))
+                                                .foregroundColor(.accentColor)
+                                                .cornerRadius(8)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+
                         Picker("Existing Customer", selection: $email) {
                             Text("Select an existing customer").tag("")
                             ForEach(customers) { c in
@@ -1944,6 +2013,10 @@ public struct ResellerTransferFundsSheetView: View {
                         .disabled(lockRecipient)
                         .foregroundColor(lockRecipient ? .secondary : .primary)
 
+                    if !lockRecipient {
+                        EmailDomainChipsView(email: $recipientEmail)
+                    }
+
                     HStack {
                         TextField(lang.tr("reseller.transfer.amountUsd"), text: $amountString)
                             .keyboardType(.decimalPad)
@@ -2132,6 +2205,41 @@ public struct ResellerSubResellerDetailSheetView: View {
                     Button(lang.tr("common.close")) { dismiss() }
                 }
             }
+        }
+    }
+}
+
+
+// MARK: - Email Domain Chips Helper
+
+public struct EmailDomainChipsView: View {
+    @Binding var email: String
+    private let domains = ["@gmail.com", "@yahoo.com", "@outlook.com", "@icloud.com", "@proton.me", "@hotmail.com"]
+
+    public var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(domains, id: \.self) { domain in
+                    Button(action: {
+                        let clean = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let atIdx = clean.firstIndex(of: "@") {
+                            email = String(clean[..<atIdx]) + domain
+                        } else {
+                            email = clean + domain
+                        }
+                    }) {
+                        Text(domain)
+                            .font(.caption2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.secondary.opacity(0.12))
+                            .foregroundColor(.accentColor)
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(.vertical, 2)
         }
     }
 }
