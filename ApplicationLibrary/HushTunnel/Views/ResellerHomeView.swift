@@ -1,3 +1,14 @@
+
+private extension CGColor {
+    static var labelColor: CGColor {
+        #if canImport(UIKit)
+            UIColor.label.cgColor
+        #elseif canImport(AppKit)
+            NSColor.labelColor.cgColor
+        #endif
+    }
+}
+
 import Library
 import SwiftUI
 
@@ -41,6 +52,8 @@ public struct ResellerHomeView: View {
     @State private var showLanguagePicker = false
     @State private var selectedCustomerForDetail: ResellerCustomer?
     @State private var showCustomerDetailSheet = false
+    @State private var prefilledOrderEmail = ""
+    @State private var activeConnectionDetails: ResellerConnectionDetails?
 
     public init() {}
 
@@ -98,7 +111,17 @@ public struct ResellerHomeView: View {
                     onToggle: { subId, enable in toggleSub(id: subId, enable: enable) },
                     onResetUuid: { subId in resetUuid(id: subId) },
                     onResetTraffic: { subId in resetTraffic(id: subId) },
-                    onRevoke: { subId in revokeSub(id: subId) }
+                    onRevoke: { subId in revokeSub(id: subId) },
+                    onSelectSub: { sub in
+                        activeConnectionDetails = ResellerConnectionDetails(
+                            title: sub.customerEmail,
+                            planName: sub.planName,
+                            subscriptionUrl: sub.subscriptionUrl,
+                            vlessLink: sub.vlessLink,
+                            expiryDate: sub.expiryDate,
+                            status: sub.isActive ? "ACTIVE" : "INACTIVE"
+                        )
+                    }
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.subscriptions"), systemImage: "antenna.radiowaves.left.and.right")
@@ -108,7 +131,17 @@ public struct ResellerHomeView: View {
                 // Tab 4: Orders & Transactions
                 ResellerOrdersAndTransactionsTabView(
                     orders: orders,
-                    transactions: transactions
+                    transactions: transactions,
+                    onSelectOrder: { order in
+                        activeConnectionDetails = ResellerConnectionDetails(
+                            title: order.customerEmail,
+                            planName: order.planName,
+                            subscriptionUrl: order.subscriptionUrl,
+                            vlessLink: order.vlessLink,
+                            amountUsd: order.amountUsd,
+                            status: order.status
+                        )
+                    }
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.orders"), systemImage: "list.bullet.rectangle.portrait.fill")
@@ -180,7 +213,7 @@ public struct ResellerHomeView: View {
                     onSelect: { s in
                         selectedServer = s
                         Task {
-                            if let activeSub = activePersonalSub {
+                            if let activeSub = personalSubscriptions.first(where: { $0.isActive }) {
                                 do {
                                     try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl, preferredServerId: s.id)
                                     if environments.extensionProfile?.status == .connected {
@@ -198,10 +231,40 @@ public struct ResellerHomeView: View {
                 ResellerSelfSubSheetView(plans: plans, balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)
             }
             .sheet(isPresented: $showAddCustomerSheet) {
-                ResellerAddCustomerSheetView(onCompleted: refreshAll)
+                ResellerAddCustomerSheetView(
+                    onCompleted: refreshAll,
+                    onCustomerCreated: { createdEmail in
+                        prefilledOrderEmail = createdEmail
+                        showCreateOrderSheet = true
+                    }
+                )
             }
             .sheet(isPresented: $showCreateOrderSheet) {
-                ResellerCreateOrderSheetView(plans: plans, customers: customers, balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)
+                ResellerCreateOrderSheetView(
+                    plans: plans,
+                    customers: customers,
+                    initialEmail: prefilledOrderEmail,
+                    balance: overview?.balanceUsd ?? 0,
+                    onCompleted: {
+                        prefilledOrderEmail = ""
+                        refreshAll()
+                    },
+                    onOrderSuccess: { res in
+                        let email = res.customerEmail ?? prefilledOrderEmail
+                        prefilledOrderEmail = ""
+                        activeConnectionDetails = ResellerConnectionDetails(
+                            title: email,
+                            planName: res.planName ?? "Active Plan",
+                            subscriptionUrl: res.subscriptionUrl,
+                            vlessLink: res.vlessLink,
+                            generatedPassword: res.generatedPassword,
+                            amountUsd: res.amountUsd
+                        )
+                    }
+                )
+            }
+            .sheet(item: $activeConnectionDetails) { details in
+                ResellerConnectionQrSheetView(details: details)
             }
             .sheet(isPresented: $showDepositSheet) {
                 ResellerDepositSheetView(gateways: gateways, onCompleted: refreshAll)
@@ -623,6 +686,7 @@ public struct ResellerSubscriptionsTabView: View {
     let onResetUuid: (String) -> Void
     let onResetTraffic: (String) -> Void
     let onRevoke: (String) -> Void
+    var onSelectSub: ((ResellerSubscription) -> Void)? = nil
 
     public var body: some View {
         List(subscriptions) { sub in
@@ -644,6 +708,10 @@ public struct ResellerSubscriptionsTabView: View {
                         .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
                         .foregroundColor(sub.isActive ? .green : .red)
                         .cornerRadius(6)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelectSub?(sub)
                 }
 
                 // Action Row
@@ -686,6 +754,7 @@ public struct ResellerSubscriptionsTabView: View {
 public struct ResellerOrdersAndTransactionsTabView: View {
     let orders: [ResellerOrder]
     let transactions: [WalletTransactionItem]
+    var onSelectOrder: ((ResellerOrder) -> Void)? = nil
     @State private var section = 0
     @State private var searchText = ""
 
@@ -740,6 +809,10 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                                     .font(.caption2)
                                     .foregroundColor(order.status == "PAID" ? .green : .orange)
                             }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            onSelectOrder?(order)
                         }
                     }
                 }
@@ -1048,6 +1121,7 @@ public struct ResellerSelfSubSheetView: View {
 
 public struct ResellerAddCustomerSheetView: View {
     let onCompleted: () -> Void
+    var onCustomerCreated: ((String) -> Void)? = nil
     @Environment(\.dismiss) var dismiss
     @State private var email = ""
     @State private var customPassword = ""
@@ -1104,7 +1178,10 @@ public struct ResellerAddCustomerSheetView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(createdPassword != nil ? "Done" : "Cancel") {
                         dismiss()
-                        if createdPassword != nil { onCompleted() }
+                        if createdPassword != nil {
+                            onCustomerCreated?(email.trimmingCharacters(in: .whitespacesAndNewlines))
+                            onCompleted()
+                        }
                     }
                 }
             }
@@ -1136,8 +1213,10 @@ public struct ResellerAddCustomerSheetView: View {
 public struct ResellerCreateOrderSheetView: View {
     let plans: [PlanInfo]
     let customers: [ResellerCustomer]
+    var initialEmail: String = ""
     let balance: Double
     let onCompleted: () -> Void
+    var onOrderSuccess: ((CreateResellerOrderResponse) -> Void)? = nil
 
     @Environment(\.dismiss) var dismiss
     @State private var email = ""
@@ -1205,6 +1284,7 @@ public struct ResellerCreateOrderSheetView: View {
                 }
             }
             .onAppear {
+                if !initialEmail.isEmpty { email = initialEmail }
                 if selectedPlanId.isEmpty, let f = plans.first { selectedPlanId = f.id }
             }
         }
@@ -1215,10 +1295,11 @@ public struct ResellerCreateOrderSheetView: View {
         errorMessage = nil
         Task {
             do {
-                _ = try await ApiClient.shared.createResellerOrder(customerEmail: email.trimmingCharacters(in: .whitespacesAndNewlines), planId: selectedPlanId)
+                let res = try await ApiClient.shared.createResellerOrder(customerEmail: email.trimmingCharacters(in: .whitespacesAndNewlines), planId: selectedPlanId)
                 await MainActor.run {
                     isProcessing = false
                     dismiss()
+                    onOrderSuccess?(res)
                     onCompleted()
                 }
             } catch {
@@ -1470,6 +1551,186 @@ public struct ResellerCustomerDetailSheetView: View {
             try? await ApiClient.shared.deleteResellerCustomer(id: customer.id)
             await MainActor.run {
                 onDeleted()
+            }
+        }
+    }
+}
+
+
+public struct ResellerConnectionDetails: Identifiable {
+    public let id = UUID()
+    public let title: String
+    public let planName: String
+    public let subscriptionUrl: String?
+    public let vlessLink: String?
+    public let generatedPassword: String?
+    public let amountUsd: Double?
+    public let expiryDate: String?
+    public let status: String?
+
+    public init(
+        title: String,
+        planName: String,
+        subscriptionUrl: String?,
+        vlessLink: String?,
+        generatedPassword: String? = nil,
+        amountUsd: Double? = nil,
+        expiryDate: String? = nil,
+        status: String? = nil
+    ) {
+        self.title = title
+        self.planName = planName
+        self.subscriptionUrl = subscriptionUrl
+        self.vlessLink = vlessLink
+        self.generatedPassword = generatedPassword
+        self.amountUsd = amountUsd
+        self.expiryDate = expiryDate
+        self.status = status
+    }
+}
+
+public struct ResellerConnectionQrSheetView: View {
+    let details: ResellerConnectionDetails
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var lang = LanguageManager.shared
+    @State private var qrMode = 0
+    @State private var copiedText: String?
+
+    private var activeUrl: String {
+        if qrMode == 1, let v = details.vlessLink, !v.isEmpty {
+            return v
+        }
+        return details.subscriptionUrl ?? details.vlessLink ?? ""
+    }
+
+    public var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    VStack(spacing: 4) {
+                        Text(details.title)
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        Text(details.planName)
+                            .font(.subheadline)
+                            .foregroundColor(.accentColor)
+                    }
+                    .padding(.top, 8)
+
+                    if let pwd = details.generatedPassword, !pwd.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Customer Login Credentials")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            HStack {
+                                Text("Password: \(pwd)")
+                                    .font(.system(.body, design: .monospaced))
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.green)
+                                Spacer()
+                                Button("Copy") {
+                                    UIPasteboard.general.string = pwd
+                                    copiedText = "Password"
+                                    Task {
+                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                        await MainActor.run { if copiedText == "Password" { copiedText = nil } }
+                                    }
+                                }
+                                .font(.caption)
+                            }
+                        }
+                        .padding(12)
+                        .background(Color.accentColor.opacity(0.1))
+                        .cornerRadius(10)
+                        .padding(.horizontal)
+                    }
+
+                    if !activeUrl.isEmpty {
+                        VStack(spacing: 12) {
+                            if details.subscriptionUrl != nil && details.vlessLink != nil {
+                                Picker("", selection: $qrMode) {
+                                    Text("Sub URL").tag(0)
+                                    Text("VLESS Link").tag(1)
+                                }
+                                .pickerStyle(.segmented)
+                                .padding(.horizontal)
+                            }
+
+                            ExternalQRCodeView(
+                                content: activeUrl,
+                                foregroundColor: .labelColor,
+                                backgroundColor: CGColor(gray: 1.0, alpha: 0.0)
+                            )
+                            .frame(width: 220, height: 220)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(16)
+                            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 2)
+                        }
+                    }
+
+                    VStack(spacing: 10) {
+                        if let vless = details.vlessLink, !vless.isEmpty {
+                            Button {
+                                UIPasteboard.general.string = vless
+                                copiedText = "VLESS"
+                                Task {
+                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                    await MainActor.run { if copiedText == "VLESS" { copiedText = nil } }
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: copiedText == "VLESS" ? "checkmark" : "doc.on.doc")
+                                    Text(copiedText == "VLESS" ? "Copied VLESS Link" : "Copy VLESS Link")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.accentColor)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                                .fontWeight(.semibold)
+                            }
+                        }
+
+                        if let subUrl = details.subscriptionUrl, !subUrl.isEmpty {
+                            Button {
+                                UIPasteboard.general.string = subUrl
+                                copiedText = "SubURL"
+                                Task {
+                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                    await MainActor.run { if copiedText == "SubURL" { copiedText = nil } }
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: copiedText == "SubURL" ? "checkmark" : "link")
+                                    Text(copiedText == "SubURL" ? "Copied Subscription URL" : "Copy Subscription URL")
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color(uiColor: .secondarySystemGroupedBackground))
+                                .foregroundColor(.accentColor)
+                                .cornerRadius(12)
+                                .fontWeight(.semibold)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    if let exp = details.expiryDate {
+                        Text("Expires: \(exp.prefix(10))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.bottom, 24)
+            }
+            .navigationTitle("Connection Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
     }

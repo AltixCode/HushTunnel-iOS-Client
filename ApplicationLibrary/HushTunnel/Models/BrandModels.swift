@@ -174,6 +174,8 @@ public struct ResellerOrder: Codable, Identifiable, Hashable {
     public let createdAt: String
     public let subscriptionId: String?
     public let paidFromBalance: Bool?
+    public let subscriptionUrl: String?
+    public let vlessLink: String?
 }
 
 public struct ResellerOrdersResponse: Codable {
@@ -185,6 +187,9 @@ public struct CreateResellerOrderResponse: Codable {
     public let customerEmail: String?
     public let generatedPassword: String?
     public let amountUsd: Double?
+    public let planName: String?
+    public let subscriptionUrl: String?
+    public let vlessLink: String?
 }
 
 public struct SelfSubscriptionResult: Codable {
@@ -203,6 +208,8 @@ public struct ResellerSubscription: Codable, Identifiable, Hashable {
     public let usedBytes: Int64
     public let totalBytes: Int64
     public let isSelf: Bool?
+    public let subscriptionUrl: String?
+    public let vlessLink: String?
 }
 
 public struct ResellerSubscriptionsResponse: Codable {
