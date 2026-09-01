@@ -187,6 +187,7 @@ public struct HushTunnelStrings {
             "reseller.tab.orders": "سفارشات",
             "reseller.tab.deposits": "افزایش موجودی",
             "reseller.tab.subresellers": "نمایندگان زیرمجموعه",
+            "reseller.tab.transactions": "تراکنش‌ها",
             "reseller.createMyVpn": "ایجاد اتصال اختصاصی برای خودم",
             "reseller.addCustomer": "افزودن کاربر جدید",
             "reseller.newOrder": "ثبت اشتراک برای کاربر",
