@@ -305,6 +305,14 @@ public struct WalletTransactionsResponse: Codable {
     public let transactions: [WalletTransactionItem]
 }
 
+public struct TransferFundsResponse: Codable {
+    public let success: Bool
+    public let transferId: String?
+    public let amountUsd: Double?
+    public let newBalance: Double?
+    public let recipientEmail: String?
+}
+
 public struct ResellerDeposit: Codable, Identifiable, Hashable {
     public let id: String
     public let amountUsd: Double

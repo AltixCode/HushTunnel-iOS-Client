@@ -54,6 +54,11 @@ public struct ResellerHomeView: View {
     @State private var showCustomerDetailSheet = false
     @State private var prefilledOrderEmail = ""
     @State private var activeConnectionDetails: ResellerConnectionDetails?
+    @State private var showTransferFundsSheet = false
+    @State private var transferInitialEmail = ""
+    @State private var transferLockRecipient = false
+    @State private var selectedSubResellerForDetail: SubReseller?
+    @State private var showSubResellerDetailSheet = false
 
     public init() {}
 
@@ -133,6 +138,12 @@ public struct ResellerHomeView: View {
                 ResellerOrdersAndTransactionsTabView(
                     orders: orders,
                     transactions: transactions,
+                    currentBalance: overview?.balanceUsd ?? 0,
+                    onTransferFunds: {
+                        transferInitialEmail = ""
+                        transferLockRecipient = false
+                        showTransferFundsSheet = true
+                    },
                     onSelectOrder: { order in
                         activeConnectionDetails = ResellerConnectionDetails(
                             title: order.customerEmail,
@@ -153,7 +164,16 @@ public struct ResellerHomeView: View {
                 // Tab 5: Sub-Resellers
                 ResellerSubResellersTabView(
                     subResellers: subResellers,
-                    onAddSubReseller: { showAddSubResellerSheet = true }
+                    onAddSubReseller: { showAddSubResellerSheet = true },
+                    onSelectSubReseller: { r in
+                        selectedSubResellerForDetail = r
+                        showSubResellerDetailSheet = true
+                    },
+                    onAddFunds: { r in
+                        transferInitialEmail = r.email
+                        transferLockRecipient = true
+                        showTransferFundsSheet = true
+                    }
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.subresellers"), systemImage: "person.3.fill")
@@ -281,6 +301,28 @@ public struct ResellerHomeView: View {
                         showCustomerDetailSheet = false
                         refreshAll()
                     })
+                }
+            }
+            .sheet(isPresented: $showTransferFundsSheet) {
+                ResellerTransferFundsSheetView(
+                    balance: overview?.balanceUsd ?? 0,
+                    initialEmail: transferInitialEmail,
+                    lockRecipient: transferLockRecipient,
+                    onCompleted: refreshAll
+                )
+            }
+            .sheet(isPresented: $showSubResellerDetailSheet) {
+                if let sub = selectedSubResellerForDetail {
+                    ResellerSubResellerDetailSheetView(
+                        subReseller: sub,
+                        currentBalance: overview?.balanceUsd ?? 0,
+                        onAddFunds: { targetReseller in
+                            showSubResellerDetailSheet = false
+                            transferInitialEmail = targetReseller.email
+                            transferLockRecipient = true
+                            showTransferFundsSheet = true
+                        }
+                    )
                 }
             }
             .task {
@@ -440,7 +482,7 @@ public struct ResellerPersonalVpnTabView: View {
                         HStack(spacing: 4) {
                             Text("Switch")
                                 .font(.caption)
-                                .fontWeight(.semibold)
+                                
                                 .foregroundColor(.accentColor)
                             Image(systemName: "chevron.right")
                                 .font(.caption2)
@@ -503,7 +545,7 @@ public struct ResellerPersonalVpnTabView: View {
 
                         Button(action: onCreateSelfSub) {
                             Text(lang.tr("reseller.createMyVpn"))
-                                .fontWeight(.semibold)
+                                
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
                                 .background(Color.green)
@@ -549,7 +591,7 @@ public struct ResellerDashboardTabView: View {
                     HStack {
                         Text("\(lang.tr("reseller.discount")): \(overview?.discountPct ?? 0)%")
                             .font(.footnote)
-                            .fontWeight(.semibold)
+                            
 
                         Spacer()
 
@@ -564,7 +606,7 @@ public struct ResellerDashboardTabView: View {
                         HStack {
                             Image(systemName: "arrow.up.forward.app.fill")
                             Text("Top Up at hushtunnel.com")
-                                .fontWeight(.semibold)
+                                
                         }
                         .frame(maxWidth: .infinity)
                         .padding(12)
@@ -659,7 +701,7 @@ public struct ResellerCustomersTabView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(customer.email)
-                            .fontWeight(.medium)
+                            
                         Text("Created: \(customer.createdAt.prefix(10))")
                             .font(.caption2)
                             .foregroundColor(.secondary)
@@ -697,7 +739,7 @@ public struct ResellerSubscriptionsTabView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(sub.customerEmail)
-                            .fontWeight(.semibold)
+                            
                         Text("\(sub.planName) · Expires \(sub.expiryDate.prefix(10))")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -705,7 +747,7 @@ public struct ResellerSubscriptionsTabView: View {
                     Spacer()
                     Text(sub.isActive ? "Active" : "Disabled")
                         .font(.caption2)
-                        .fontWeight(.bold)
+                        
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
@@ -757,7 +799,10 @@ public struct ResellerSubscriptionsTabView: View {
 public struct ResellerOrdersAndTransactionsTabView: View {
     let orders: [ResellerOrder]
     let transactions: [WalletTransactionItem]
+    var currentBalance: Double = 0
+    var onTransferFunds: (() -> Void)? = nil
     var onSelectOrder: ((ResellerOrder) -> Void)? = nil
+    @ObservedObject var lang = LanguageManager.shared
     @State private var section = 0
     @State private var searchText = ""
 
@@ -799,7 +844,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(order.customerEmail)
-                                    .fontWeight(.medium)
+                                    
                                 Text("\(order.planName) · \(order.createdAt.prefix(10))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -807,7 +852,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                             Spacer()
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text("$\(String(format: "%.2f", order.amountUsd))")
-                                    .fontWeight(.bold)
+                                    
                                 Text(order.status)
                                     .font(.caption2)
                                     .foregroundColor(order.status == "PAID" ? .green : .orange)
@@ -820,18 +865,48 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                     }
                 }
             } else {
-                if transactions.isEmpty {
-                    VStack(spacing: 12) {
+                VStack(spacing: 0) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(lang.tr("reseller.balance"))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("$\(String(format: "%.2f", currentBalance))")
+                                .font(.title3)
+                                
+                                .foregroundColor(.accentColor)
+                        }
                         Spacer()
-                        Image(systemName: "list.bullet.rectangle.portrait")
-                            .font(.system(size: 44))
-                            .foregroundColor(.secondary)
-                        Text("No transactions found.")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                        Spacer()
+                        Button(action: { onTransferFunds?() }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.left.arrow.right")
+                                Text(lang.tr("reseller.transferFunds"))
+                            }
+                            .font(.subheadline)
+                            
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.accentColor)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
                     }
-                } else {
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.secondary.opacity(0.08))
+
+                    if transactions.isEmpty {
+                        VStack(spacing: 12) {
+                            Spacer()
+                            Image(systemName: "list.bullet.rectangle.portrait")
+                                .font(.system(size: 44))
+                                .foregroundColor(.secondary)
+                            Text("No transactions found.")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+                    } else {
                     List(filteredTransactions) { tx in
                         let isCredit = tx.type == "TRANSFER_IN" || tx.type == "DEPOSIT" || (tx.amountUsd > 0 && tx.balanceAfter > tx.balanceBefore)
                         let sign = isCredit ? "+" : "-"
@@ -841,7 +916,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                             HStack {
                                 Text(tx.type.replacingOccurrences(of: "_", with: " "))
                                     .font(.caption)
-                                    .fontWeight(.bold)
+                                    
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(Color.accentColor.opacity(0.12))
@@ -852,14 +927,14 @@ public struct ResellerOrdersAndTransactionsTabView: View {
 
                                 Text("\(sign)$\(String(format: "%.2f", tx.amountUsd))")
                                     .font(.subheadline)
-                                    .fontWeight(.bold)
+                                    
                                     .foregroundColor(color)
                             }
 
                             if let desc = tx.description, !desc.isEmpty {
                                 Text(desc)
                                     .font(.subheadline)
-                                    .fontWeight(.medium)
+                                    
                             }
 
                             if let email = tx.counterpartEmail, !email.isEmpty {
@@ -882,6 +957,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                     }
                     .searchable(text: $searchText, prompt: "Search transactions...")
                 }
+                }
             }
         }
     }
@@ -892,6 +968,8 @@ public struct ResellerOrdersAndTransactionsTabView: View {
 public struct ResellerSubResellersTabView: View {
     let subResellers: [SubReseller]
     let onAddSubReseller: () -> Void
+    var onSelectSubReseller: ((SubReseller) -> Void)? = nil
+    var onAddFunds: ((SubReseller) -> Void)? = nil
     @ObservedObject var lang = LanguageManager.shared
 
     public var body: some View {
@@ -914,20 +992,39 @@ public struct ResellerSubResellersTabView: View {
                 Spacer()
             } else {
                 List(subResellers) { r in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(r.email)
-                                .fontWeight(.medium)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(r.email)
+                                    
+                                Text(String(format: lang.tr("reseller.subresellers.stats"), r.customerCount, r.subscriptionCount))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                             Spacer()
-                            Text("$\(String(format: "%.2f", r.balanceUsd))")
-                                .fontWeight(.bold)
-                                .foregroundColor(.accentColor)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("$\(String(format: "%.2f", r.balanceUsd))")
+                                    
+                                    .foregroundColor(.accentColor)
+                                Button(action: { onAddFunds?(r) }) {
+                                    Text(lang.tr("reseller.subresellers.addFunds"))
+                                        .font(.caption2)
+                                        
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.green.opacity(0.15))
+                                        .foregroundColor(.green)
+                                        .cornerRadius(6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
                         }
-                        Text(String(format: lang.tr("reseller.subresellers.stats"), r.customerCount, r.subscriptionCount))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                     .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onSelectSubReseller?(r)
+                    }
                 }
             }
         }
@@ -960,7 +1057,7 @@ public struct ResellerAddSubResellerSheetView: View {
                         HStack {
                             Text(pwd)
                                 .font(.system(.body, design: .monospaced))
-                                .fontWeight(.bold)
+                                
                                 .foregroundColor(.green)
                             Spacer()
                             Button(lang.tr("common.copy")) {
@@ -995,7 +1092,7 @@ public struct ResellerAddSubResellerSheetView: View {
                             HStack {
                                 Spacer()
                                 if isProcessing { ProgressView().padding(.trailing, 8) }
-                                Text(lang.tr("reseller.addSubReseller")).fontWeight(.bold)
+                                Text(lang.tr("reseller.addSubReseller"))
                                 Spacer()
                             }
                         }
@@ -1061,7 +1158,7 @@ public struct ResellerSelfSubSheetView: View {
                             }
                             Spacer()
                             Text("$\(String(format: "%.2f", plan.priceUsd))")
-                                .fontWeight(.bold)
+                                
                             if selectedPlanId == plan.id {
                                 Image(systemName: "checkmark").foregroundColor(.accentColor)
                             }
@@ -1080,7 +1177,7 @@ public struct ResellerSelfSubSheetView: View {
                         HStack {
                             Spacer()
                             if isProcessing { ProgressView().padding(.trailing, 8) }
-                            Text("Confirm & Deduct from Balance").fontWeight(.bold)
+                            Text("Confirm & Deduct from Balance")
                             Spacer()
                         }
                     }
@@ -1142,7 +1239,7 @@ public struct ResellerAddCustomerSheetView: View {
                         HStack {
                             Text(pwd)
                                 .font(.system(.body, design: .monospaced))
-                                .fontWeight(.bold)
+                                
                                 .foregroundColor(.green)
                             Spacer()
                             Button("Copy") {
@@ -1168,7 +1265,7 @@ public struct ResellerAddCustomerSheetView: View {
                             HStack {
                                 Spacer()
                                 if isProcessing { ProgressView().padding(.trailing, 8) }
-                                Text("Create Customer Account").fontWeight(.bold)
+                                Text("Create Customer Account")
                                 Spacer()
                             }
                         }
@@ -1254,7 +1351,7 @@ public struct ResellerCreateOrderSheetView: View {
                             }
                             Spacer()
                             Text("$\(String(format: "%.2f", plan.priceUsd))")
-                                .fontWeight(.bold)
+                                
                             if selectedPlanId == plan.id {
                                 Image(systemName: "checkmark").foregroundColor(.accentColor)
                             }
@@ -1273,7 +1370,7 @@ public struct ResellerCreateOrderSheetView: View {
                         HStack {
                             Spacer()
                             if isProcessing { ProgressView().padding(.trailing, 8) }
-                            Text("Confirm & Pay from Balance").fontWeight(.bold)
+                            Text("Confirm & Pay from Balance")
                             Spacer()
                         }
                     }
@@ -1383,7 +1480,7 @@ public struct ResellerDepositSheetView: View {
                         HStack {
                             Spacer()
                             if isProcessing { ProgressView().padding(.trailing, 8) }
-                            Text("Deposit Funds").fontWeight(.bold)
+                            Text("Deposit Funds")
                             Spacer()
                         }
                     }
@@ -1452,7 +1549,7 @@ public struct ResellerCustomerDetailSheetView: View {
                     if let subs = detail?.subscriptions, !subs.isEmpty {
                         ForEach(subs) { s in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(s.planName).fontWeight(.medium)
+                                Text(s.planName)
                                 Text("Expires: \(s.expiryDate.prefix(10))").font(.caption).foregroundColor(.secondary)
 
                                 HStack(spacing: 12) {
@@ -1499,7 +1596,7 @@ public struct ResellerCustomerDetailSheetView: View {
 
                     if let pwd = generatedPasswordResult {
                         HStack {
-                            Text("New password: \(pwd)").font(.caption).foregroundColor(.green).fontWeight(.bold)
+                            Text("New password: \(pwd)").font(.caption).foregroundColor(.green)
                             Spacer()
                             Button("Copy") { UIPasteboard.general.string = pwd }
                         }
@@ -1608,7 +1705,7 @@ public struct ResellerConnectionQrSheetView: View {
                     VStack(spacing: 4) {
                         Text(details.title)
                             .font(.headline)
-                            .fontWeight(.bold)
+                            
                         Text(details.planName)
                             .font(.subheadline)
                             .foregroundColor(.accentColor)
@@ -1619,12 +1716,12 @@ public struct ResellerConnectionQrSheetView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Customer Login Credentials")
                                 .font(.caption)
-                                .fontWeight(.bold)
+                                
                                 .foregroundColor(.primary)
                             HStack {
                                 Text("Password: \(pwd)")
                                     .font(.system(.body, design: .monospaced))
-                                    .fontWeight(.bold)
+                                    
                                     .foregroundColor(.green)
                                 Spacer()
                                 Button("Copy") {
@@ -1659,7 +1756,7 @@ public struct ResellerConnectionQrSheetView: View {
                             HStack {
                                 Image(systemName: copiedText == "SubURL" ? "checkmark" : "link")
                                 Text(copiedText == "SubURL" ? "Copied Subscription URL" : "Copy Subscription URL")
-                                    .fontWeight(.semibold)
+                                    
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -1704,7 +1801,7 @@ public struct ResellerConnectionQrSheetView: View {
                                 HStack {
                                     Image(systemName: copiedText == "VLESS" ? "checkmark" : "doc.on.doc")
                                     Text(copiedText == "VLESS" ? "Copied VLESS Link" : "Copy VLESS Link")
-                                        .fontWeight(.semibold)
+                                        
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding()
@@ -1801,7 +1898,7 @@ private struct ResellerServerLinkRowView: View {
                 HStack {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     Text(copied ? "Copied VLESS Link" : "Copy VLESS Link")
-                        .fontWeight(.semibold)
+                        
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -1814,5 +1911,227 @@ private struct ResellerServerLinkRowView: View {
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .cornerRadius(16)
         .padding(.horizontal)
+    }
+}
+
+// MARK: - Reseller Transfer Funds Sheet
+
+public struct ResellerTransferFundsSheetView: View {
+    let balance: Double
+    var initialEmail: String = ""
+    var lockRecipient: Bool = false
+    let onCompleted: () -> Void
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var lang = LanguageManager.shared
+    @State private var recipientEmail = ""
+    @State private var amountString = ""
+    @State private var note = ""
+    @State private var isProcessing = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
+
+    private var amount: Double { Double(amountString) ?? 0 }
+    private var isOverBalance: Bool { amount > balance }
+    private var remainingBalance: Double { max(0, balance - amount) }
+
+    public var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text(lang.tr("reseller.transferFunds")), footer: Text("Instant zero-fee transfer to any user or sub-reseller")) {
+                    TextField(lang.tr("reseller.transfer.recipientEmail"), text: $recipientEmail)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .disabled(lockRecipient)
+                        .foregroundColor(lockRecipient ? .secondary : .primary)
+
+                    HStack {
+                        TextField(lang.tr("reseller.transfer.amountUsd"), text: $amountString)
+                            .keyboardType(.decimalPad)
+                        Spacer()
+                        Button("Max") {
+                            amountString = String(format: "%.2f", balance)
+                        }
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                    }
+
+                    // Quick chip buttons
+                    HStack(spacing: 8) {
+                        ForEach([5, 10, 25, 50], id: \.self) { quickVal in
+                            Button("+\(quickVal)") {
+                                let newAmt = min(Double(quickVal), balance)
+                                amountString = String(format: "%.2f", newAmt)
+                            }
+                            .font(.caption2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.secondary.opacity(0.12))
+                            .cornerRadius(6)
+                            .disabled(balance < Double(quickVal))
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    TextField(lang.tr("reseller.transfer.note"), text: $note)
+                }
+
+                Section(header: Text("Balance Summary")) {
+                    HStack {
+                        Text(String(format: lang.tr("reseller.transfer.availableBalance"), String(format: "%.2f", balance)))
+                            .font(.subheadline)
+                            
+                        Spacer()
+                    }
+
+                    if amount > 0 {
+                        HStack {
+                            Text(String(format: lang.tr("reseller.transfer.remainingBalance"), String(format: "%.2f", remainingBalance)))
+                                .font(.caption)
+                                .foregroundColor(isOverBalance ? .red : .secondary)
+                            Spacer()
+                        }
+                    }
+                }
+
+                if isOverBalance {
+                    Section { Text(lang.tr("reseller.insufficientBalance")).foregroundColor(.red).font(.caption) }
+                }
+
+                if let err = errorMessage {
+                    Section { Text(err).foregroundColor(.red).font(.caption) }
+                }
+
+                if let msg = successMessage {
+                    Section { Text(msg).foregroundColor(.green).font(.caption) }
+                }
+
+                Section {
+                    Button(action: handleTransfer) {
+                        HStack {
+                            Spacer()
+                            if isProcessing { ProgressView().padding(.trailing, 8) }
+                            Text(lang.tr("reseller.transfer.confirm"))
+                            Spacer()
+                        }
+                    }
+                    .disabled(recipientEmail.isEmpty || !recipientEmail.contains("@") || amount <= 0 || isOverBalance || isProcessing)
+                }
+            }
+            .navigationTitle(lang.tr("reseller.transferFunds"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(lang.tr("common.cancel")) { dismiss() }
+                }
+            }
+            .onAppear {
+                if !initialEmail.isEmpty {
+                    recipientEmail = initialEmail
+                }
+            }
+        }
+    }
+
+    private func handleTransfer() {
+        guard !recipientEmail.isEmpty, amount > 0, !isOverBalance else { return }
+        isProcessing = true
+        errorMessage = nil
+        successMessage = nil
+        Task {
+            do {
+                _ = try await ApiClient.shared.transferFunds(
+                    recipientEmail: recipientEmail,
+                    amountUsd: amount,
+                    description: note.isEmpty ? nil : note
+                )
+                await MainActor.run {
+                    isProcessing = false
+                    successMessage = lang.tr("reseller.transfer.success")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        dismiss()
+                        onCompleted()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isProcessing = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reseller Sub-Reseller Detail Sheet
+
+public struct ResellerSubResellerDetailSheetView: View {
+    let subReseller: SubReseller
+    let currentBalance: Double
+    let onAddFunds: (SubReseller) -> Void
+    @Environment(\.dismiss) var dismiss
+    @ObservedObject var lang = LanguageManager.shared
+
+    public var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text(lang.tr("reseller.subresellers.details"))) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(subReseller.email).font(.headline)
+                        Text("Sub-Reseller Partner")
+                            .font(.caption)
+                            .foregroundColor(.accentColor)
+                    }
+
+                    HStack {
+                        Text(lang.tr("reseller.balance"))
+                        Spacer()
+                        Text("$\(String(format: "%.2f", subReseller.balanceUsd))")
+                            
+                            .foregroundColor(.green)
+                    }
+
+                    HStack {
+                        Text(lang.tr("reseller.tab.customers"))
+                        Spacer()
+                        Text("\(subReseller.customerCount)")
+                            
+                    }
+
+                    HStack {
+                        Text(lang.tr("reseller.tab.subscriptions"))
+                        Spacer()
+                        Text("\(subReseller.subscriptionCount)")
+                            
+                    }
+
+                    HStack {
+                        Text("Joined")
+                        Spacer()
+                        Text(subReseller.createdAt.prefix(10))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Section {
+                    Button(action: {
+                        dismiss()
+                        onAddFunds(subReseller)
+                    }) {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "plus.circle")
+                            Text(lang.tr("reseller.subresellers.addFunds"))
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .navigationTitle(lang.tr("reseller.subresellers.details"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(lang.tr("common.close")) { dismiss() }
+                }
+            }
+        }
     }
 }

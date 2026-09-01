@@ -248,6 +248,18 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
         return res.transactions
     }
 
+    public func transferFunds(recipientEmail: String, amountUsd: Double, description: String? = nil) async throws -> TransferFundsResponse {
+        var body: [String: Any] = [
+            "recipientEmail": recipientEmail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            "amountUsd": amountUsd,
+        ]
+        if let description = description, !description.isEmpty {
+            body["description"] = description
+        }
+        let request = try makeRequest(path: "/api/mobile/wallet/transfer", method: "POST", body: body)
+        return try await perform(request)
+    }
+
     public func resellerDeposits() async throws -> [ResellerDeposit] {
         let request = try makeRequest(path: "/api/mobile/reseller/deposits")
         let res: ResellerDepositsResponse = try await perform(request)
