@@ -85,19 +85,21 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     // MARK: - Auth
 
     public func login(email: String, password: String) async throws -> AuthResult {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let request = try makeRequest(
             path: "/api/mobile/login",
             method: "POST",
-            body: ["email": email, "password": password]
+            body: ["email": cleanEmail, "password": password]
         )
         return try await perform(request)
     }
 
     public func register(email: String, password: String) async throws -> AuthResult {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let request = try makeRequest(
             path: "/api/mobile/register",
             method: "POST",
-            body: ["email": email, "password": password]
+            body: ["email": cleanEmail, "password": password]
         )
         return try await perform(request)
     }
@@ -156,7 +158,8 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func createResellerCustomer(email: String, password: String? = nil) async throws -> CreateCustomerResponse {
-        var body: [String: Any] = ["email": email]
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var body: [String: Any] = ["email": cleanEmail]
         if let password = password, !password.isEmpty {
             body["password"] = password
         }
@@ -267,10 +270,11 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func createSubReseller(email: String, initialBalanceUsd: Double) async throws -> CreatedSubReseller {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let request = try makeRequest(
             path: "/api/mobile/reseller/resellers",
             method: "POST",
-            body: ["email": email, "initialBalanceUsd": initialBalanceUsd]
+            body: ["email": cleanEmail, "initialBalanceUsd": initialBalanceUsd]
         )
         let res: CreateSubResellerResponse = try await perform(request)
         return res.reseller
