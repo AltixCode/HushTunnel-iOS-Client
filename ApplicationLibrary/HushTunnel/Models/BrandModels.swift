@@ -165,6 +165,19 @@ public struct ResellerCustomerDetailResponse: Codable {
     public let customer: ResellerCustomerDetail
 }
 
+// A single edge-server's VLESS connection details, as returned by the
+// reseller mobile order/subscription endpoints in the `servers` array.
+// Ordered by the backend: default server first, then configured order.
+public struct ResellerServerLink: Codable, Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let countryCode: String
+    public let flag: String
+    public let city: String?
+    public let isDefault: Bool
+    public let vlessLink: String
+}
+
 public struct ResellerOrder: Codable, Identifiable, Hashable {
     public let id: String
     public let customerEmail: String
@@ -176,6 +189,27 @@ public struct ResellerOrder: Codable, Identifiable, Hashable {
     public let paidFromBalance: Bool?
     public let subscriptionUrl: String?
     public let vlessLink: String?
+    public let servers: [ResellerServerLink]
+
+    enum CodingKeys: String, CodingKey {
+        case id, customerEmail, planName, amountUsd, status, createdAt
+        case subscriptionId, paidFromBalance, subscriptionUrl, vlessLink, servers
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        customerEmail = try c.decode(String.self, forKey: .customerEmail)
+        planName = try c.decode(String.self, forKey: .planName)
+        amountUsd = try c.decode(Double.self, forKey: .amountUsd)
+        status = try c.decode(String.self, forKey: .status)
+        createdAt = try c.decode(String.self, forKey: .createdAt)
+        subscriptionId = try c.decodeIfPresent(String.self, forKey: .subscriptionId)
+        paidFromBalance = try c.decodeIfPresent(Bool.self, forKey: .paidFromBalance)
+        subscriptionUrl = try c.decodeIfPresent(String.self, forKey: .subscriptionUrl)
+        vlessLink = try c.decodeIfPresent(String.self, forKey: .vlessLink)
+        servers = (try? c.decode([ResellerServerLink].self, forKey: .servers)) ?? []
+    }
 }
 
 public struct ResellerOrdersResponse: Codable {
@@ -190,6 +224,23 @@ public struct CreateResellerOrderResponse: Codable {
     public let planName: String?
     public let subscriptionUrl: String?
     public let vlessLink: String?
+    public let servers: [ResellerServerLink]
+
+    enum CodingKeys: String, CodingKey {
+        case orderId, customerEmail, generatedPassword, amountUsd, planName, subscriptionUrl, vlessLink, servers
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        orderId = try c.decode(String.self, forKey: .orderId)
+        customerEmail = try c.decodeIfPresent(String.self, forKey: .customerEmail)
+        generatedPassword = try c.decodeIfPresent(String.self, forKey: .generatedPassword)
+        amountUsd = try c.decodeIfPresent(Double.self, forKey: .amountUsd)
+        planName = try c.decodeIfPresent(String.self, forKey: .planName)
+        subscriptionUrl = try c.decodeIfPresent(String.self, forKey: .subscriptionUrl)
+        vlessLink = try c.decodeIfPresent(String.self, forKey: .vlessLink)
+        servers = (try? c.decode([ResellerServerLink].self, forKey: .servers)) ?? []
+    }
 }
 
 public struct SelfSubscriptionResult: Codable {
@@ -210,6 +261,27 @@ public struct ResellerSubscription: Codable, Identifiable, Hashable {
     public let isSelf: Bool?
     public let subscriptionUrl: String?
     public let vlessLink: String?
+    public let servers: [ResellerServerLink]
+
+    enum CodingKeys: String, CodingKey {
+        case id, customerEmail, planName, expiryDate, isActive, usedBytes, totalBytes
+        case isSelf, subscriptionUrl, vlessLink, servers
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        customerEmail = try c.decode(String.self, forKey: .customerEmail)
+        planName = try c.decode(String.self, forKey: .planName)
+        expiryDate = try c.decode(String.self, forKey: .expiryDate)
+        isActive = try c.decode(Bool.self, forKey: .isActive)
+        usedBytes = try c.decode(Int64.self, forKey: .usedBytes)
+        totalBytes = try c.decode(Int64.self, forKey: .totalBytes)
+        isSelf = try c.decodeIfPresent(Bool.self, forKey: .isSelf)
+        subscriptionUrl = try c.decodeIfPresent(String.self, forKey: .subscriptionUrl)
+        vlessLink = try c.decodeIfPresent(String.self, forKey: .vlessLink)
+        servers = (try? c.decode([ResellerServerLink].self, forKey: .servers)) ?? []
+    }
 }
 
 public struct ResellerSubscriptionsResponse: Codable {

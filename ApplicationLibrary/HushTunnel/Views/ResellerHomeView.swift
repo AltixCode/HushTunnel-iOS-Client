@@ -119,7 +119,8 @@ public struct ResellerHomeView: View {
                             subscriptionUrl: sub.subscriptionUrl,
                             vlessLink: sub.vlessLink,
                             expiryDate: sub.expiryDate,
-                            status: sub.isActive ? "ACTIVE" : "INACTIVE"
+                            status: sub.isActive ? "ACTIVE" : "INACTIVE",
+                            servers: sub.servers
                         )
                     }
                 )
@@ -139,7 +140,8 @@ public struct ResellerHomeView: View {
                             subscriptionUrl: order.subscriptionUrl,
                             vlessLink: order.vlessLink,
                             amountUsd: order.amountUsd,
-                            status: order.status
+                            status: order.status,
+                            servers: order.servers
                         )
                     }
                 )
@@ -258,7 +260,8 @@ public struct ResellerHomeView: View {
                             subscriptionUrl: res.subscriptionUrl,
                             vlessLink: res.vlessLink,
                             generatedPassword: res.generatedPassword,
-                            amountUsd: res.amountUsd
+                            amountUsd: res.amountUsd,
+                            servers: res.servers
                         )
                     }
                 )
@@ -1567,6 +1570,7 @@ public struct ResellerConnectionDetails: Identifiable {
     public let amountUsd: Double?
     public let expiryDate: String?
     public let status: String?
+    public let servers: [ResellerServerLink]
 
     public init(
         title: String,
@@ -1576,7 +1580,8 @@ public struct ResellerConnectionDetails: Identifiable {
         generatedPassword: String? = nil,
         amountUsd: Double? = nil,
         expiryDate: String? = nil,
-        status: String? = nil
+        status: String? = nil,
+        servers: [ResellerServerLink] = []
     ) {
         self.title = title
         self.planName = planName
@@ -1586,6 +1591,7 @@ public struct ResellerConnectionDetails: Identifiable {
         self.amountUsd = amountUsd
         self.expiryDate = expiryDate
         self.status = status
+        self.servers = servers
     }
 }
 
@@ -1593,15 +1599,7 @@ public struct ResellerConnectionQrSheetView: View {
     let details: ResellerConnectionDetails
     @Environment(\.dismiss) var dismiss
     @ObservedObject var lang = LanguageManager.shared
-    @State private var qrMode = 0
     @State private var copiedText: String?
-
-    private var activeUrl: String {
-        if qrMode == 1, let v = details.vlessLink, !v.isEmpty {
-            return v
-        }
-        return details.subscriptionUrl ?? details.vlessLink ?? ""
-    }
 
     public var body: some View {
         NavigationView {
@@ -1646,19 +1644,46 @@ public struct ResellerConnectionQrSheetView: View {
                         .padding(.horizontal)
                     }
 
-                    if !activeUrl.isEmpty {
-                        VStack(spacing: 12) {
-                            if details.subscriptionUrl != nil && details.vlessLink != nil {
-                                Picker("", selection: $qrMode) {
-                                    Text("Sub URL").tag(0)
-                                    Text("VLESS Link").tag(1)
-                                }
-                                .pickerStyle(.segmented)
-                                .padding(.horizontal)
+                    // Subscription URL: one aggregate link that works across every
+                    // server, shown once as a single always-visible copy action —
+                    // NOT per-server (unlike the VLESS links below).
+                    if let subUrl = details.subscriptionUrl, !subUrl.isEmpty {
+                        Button {
+                            UIPasteboard.general.string = subUrl
+                            copiedText = "SubURL"
+                            Task {
+                                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                await MainActor.run { if copiedText == "SubURL" { copiedText = nil } }
                             }
+                        } label: {
+                            HStack {
+                                Image(systemName: copiedText == "SubURL" ? "checkmark" : "link")
+                                Text(copiedText == "SubURL" ? "Copied Subscription URL" : "Copy Subscription URL")
+                                    .fontWeight(.semibold)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(uiColor: .secondarySystemGroupedBackground))
+                            .foregroundColor(.accentColor)
+                            .cornerRadius(12)
+                        }
+                        .padding(.horizontal)
+                    }
 
+                    // Per-server VLESS links: one card per active edge server,
+                    // default-first, exactly in the order the API returned them.
+                    if !details.servers.isEmpty {
+                        VStack(spacing: 12) {
+                            ForEach(details.servers) { server in
+                                ResellerServerLinkRowView(server: server)
+                            }
+                        }
+                    } else if let vless = details.vlessLink, !vless.isEmpty {
+                        // Defensive fallback for older cached responses that
+                        // predate the `servers` array — single VLESS link only.
+                        VStack(spacing: 12) {
                             ExternalQRCodeView(
-                                content: activeUrl,
+                                content: vless,
                                 foregroundColor: .labelColor,
                                 backgroundColor: CGColor(gray: 1.0, alpha: 0.0)
                             )
@@ -1667,11 +1692,7 @@ public struct ResellerConnectionQrSheetView: View {
                             .background(Color.white)
                             .cornerRadius(16)
                             .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 2)
-                        }
-                    }
 
-                    VStack(spacing: 10) {
-                        if let vless = details.vlessLink, !vless.isEmpty {
                             Button {
                                 UIPasteboard.general.string = vless
                                 copiedText = "VLESS"
@@ -1683,39 +1704,17 @@ public struct ResellerConnectionQrSheetView: View {
                                 HStack {
                                     Image(systemName: copiedText == "VLESS" ? "checkmark" : "doc.on.doc")
                                     Text(copiedText == "VLESS" ? "Copied VLESS Link" : "Copy VLESS Link")
+                                        .fontWeight(.semibold)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(Color.accentColor)
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
-                                .fontWeight(.semibold)
                             }
                         }
-
-                        if let subUrl = details.subscriptionUrl, !subUrl.isEmpty {
-                            Button {
-                                UIPasteboard.general.string = subUrl
-                                copiedText = "SubURL"
-                                Task {
-                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                    await MainActor.run { if copiedText == "SubURL" { copiedText = nil } }
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: copiedText == "SubURL" ? "checkmark" : "link")
-                                    Text(copiedText == "SubURL" ? "Copied Subscription URL" : "Copy Subscription URL")
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color(uiColor: .secondarySystemGroupedBackground))
-                                .foregroundColor(.accentColor)
-                                .cornerRadius(12)
-                                .fontWeight(.semibold)
-                            }
-                        }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
 
                     if let exp = details.expiryDate {
                         Text("Expires: \(exp.prefix(10))")
@@ -1733,5 +1732,87 @@ public struct ResellerConnectionQrSheetView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Per-server VLESS link row
+
+// One card per active edge server for a customer's connection: flag, name,
+// city/country, an optional "Default" badge, that server's own QR code, and
+// a copy button scoped to that server's own vlessLink. Each row is its own
+// SwiftUI View instance holding `server` as a `let` and `copied` as its own
+// @State, so there is no shared/stale-closure state across ForEach rows —
+// every row's button captures only its own server value.
+private struct ResellerServerLinkRowView: View {
+    let server: ResellerServerLink
+    @ObservedObject var lang = LanguageManager.shared
+    @State private var copied = false
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Text(server.flag)
+                    .font(.system(size: 28))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(server.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+
+                        if server.isDefault {
+                            Text(lang.tr("reseller.serverDefault"))
+                                .font(.system(size: 10, weight: .bold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.15))
+                                .foregroundColor(.accentColor)
+                                .cornerRadius(4)
+                        }
+                    }
+
+                    Text(server.city ?? server.countryCode)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+            }
+
+            ExternalQRCodeView(
+                content: server.vlessLink,
+                foregroundColor: .labelColor,
+                backgroundColor: CGColor(gray: 1.0, alpha: 0.0)
+            )
+            .frame(width: 180, height: 180)
+            .padding()
+            .background(Color.white)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 2)
+
+            Button {
+                UIPasteboard.general.string = server.vlessLink
+                copied = true
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    await MainActor.run { copied = false }
+                }
+            } label: {
+                HStack {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    Text(copied ? "Copied VLESS Link" : "Copy VLESS Link")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.accentColor)
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+        }
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(16)
+        .padding(.horizontal)
     }
 }
