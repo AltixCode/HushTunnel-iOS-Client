@@ -68,6 +68,7 @@ public struct ResellerHomeView: View {
                     overview: overview,
                     onAddFunds: { showDepositSheet = true },
                     onNewCustomer: { showAddCustomerSheet = true },
+                    onNewReseller: { showAddSubResellerSheet = true },
                     onNewOrder: { showCreateOrderSheet = true }
                 )
                 .tabItem {
@@ -453,6 +454,7 @@ public struct ResellerDashboardTabView: View {
     let overview: ResellerOverview?
     let onAddFunds: () -> Void
     let onNewCustomer: () -> Void
+    let onNewReseller: () -> Void
     let onNewOrder: () -> Void
     @ObservedObject var lang = LanguageManager.shared
 
@@ -520,6 +522,18 @@ public struct ResellerDashboardTabView: View {
                         HStack {
                             Image(systemName: "person.badge.plus")
                             Text(lang.tr("reseller.addCustomer"))
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+                        .padding(16)
+                        .background(Color(uiColor: .systemBackground))
+                        .cornerRadius(14)
+                    }
+
+                    Button(action: onNewReseller) {
+                        HStack {
+                            Image(systemName: "person.2.badge.plus")
+                            Text(lang.tr("reseller.addSubReseller"))
                             Spacer()
                             Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                         }
