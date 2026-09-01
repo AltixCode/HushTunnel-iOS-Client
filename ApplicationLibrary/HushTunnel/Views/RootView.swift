@@ -37,7 +37,7 @@ public struct AdminAlertView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Admin accounts must use the web dashboard at vpn-billing-dashboard.vercel.app to manage the infrastructure and billing.")
+            Text("Admin accounts must use the web dashboard at hushtunnel.com to manage the infrastructure and billing.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

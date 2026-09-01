@@ -5,7 +5,7 @@ public enum BrandConfig {
     #if DEBUG
     public static let apiBaseURL = "http://localhost:3000"
     #else
-    public static let apiBaseURL = "https://vpn-billing-dashboard.vercel.app"
+    public static let apiBaseURL = "https://hushtunnel.com"
     #endif
     public static let appScheme = "hushtunnel"
     public static let supportURL = "https://www.hushtunnel.com"
