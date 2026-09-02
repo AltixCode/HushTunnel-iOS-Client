@@ -5,7 +5,7 @@ on:
     tags:
       - 'v*'
     branches:
-      - main
+      - dev
   workflow_dispatch:
     inputs:
       upload_to_app_store:
