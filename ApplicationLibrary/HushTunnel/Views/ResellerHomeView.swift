@@ -502,7 +502,7 @@ public struct ResellerPersonalVpnTabView: View {
                                 .cornerRadius(6)
                         }
 
-                        Text("Plan: \(sub.planName) · Expires: \(sub.expiryDate.prefix(10))")
+                        Text("Plan: \(sub.planName) · Expires: \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
 
@@ -688,7 +688,7 @@ public struct ResellerCustomersTabView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(customer.email)
                             
-                        Text("Created: \(customer.createdAt.prefix(10))")
+                        Text("Created: \(DateUtils.formatDateWithShamsi(customer.createdAt))")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
@@ -743,7 +743,7 @@ public struct ResellerSubscriptionsTabView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(sub.customerEmail)
                             
-                        Text("\(sub.planName) · Expires \(sub.expiryDate.prefix(10))")
+                        Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -834,6 +834,42 @@ public struct ResellerOrdersAndTransactionsTabView: View {
         }
     }
 
+    /// Renders a wallet transaction's description, preferring the localized
+    /// `descriptionKey`/`params` pair (server-driven i18n) and falling back
+    /// to the raw English `description` for legacy rows or free-text notes.
+    func renderedDescription(for tx: WalletTransactionItem) -> String {
+        guard let key = tx.descriptionKey else {
+            return tx.description ?? ""
+        }
+        let params = tx.params ?? [:]
+        switch key {
+        case "tx.transferOut":
+            return String(format: lang.tr(key), params["email"] ?? "")
+        case "tx.transferIn":
+            return String(format: lang.tr(key), params["email"] ?? "")
+        case "tx.deposit":
+            return String(format: lang.tr(key), params["depositId"] ?? "")
+        case "tx.planPurchase":
+            return String(format: lang.tr(key), params["planName"] ?? "")
+        case "tx.orderPayment":
+            return String(format: lang.tr(key), params["orderId"] ?? "")
+        case "tx.personalSubscription":
+            return String(format: lang.tr(key), params["planName"] ?? "")
+        case "tx.personalRenewal":
+            return String(format: lang.tr(key), params["planName"] ?? "")
+        case "tx.createdAccountOrder":
+            return String(format: lang.tr(key), params["email"] ?? "", params["planName"] ?? "")
+        case "tx.orderForCustomer":
+            return String(format: lang.tr(key), params["email"] ?? "", params["planName"] ?? "")
+        case "tx.subResellerInitialBalance":
+            return String(format: lang.tr(key), params["email"] ?? "")
+        case "tx.startupBalanceFromParent":
+            return lang.tr(key)
+        default:
+            return tx.description ?? ""
+        }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $section) {
@@ -861,7 +897,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(order.customerEmail)
                                     
-                                Text("\(order.planName) · \(order.createdAt.prefix(10))")
+                                Text("\(order.planName) · \(DateUtils.formatDateWithShamsi(order.createdAt))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -947,10 +983,11 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                                     .foregroundColor(color)
                             }
 
-                            if let desc = tx.description, !desc.isEmpty {
+                            let desc = renderedDescription(for: tx)
+                            if !desc.isEmpty {
                                 Text(desc)
                                     .font(.subheadline)
-                                    
+
                             }
 
                             if let email = tx.counterpartEmail, !email.isEmpty {
@@ -964,7 +1001,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(String(tx.createdAt.prefix(16)).replacingOccurrences(of: "T", with: " "))
+                                Text(String(tx.createdAt.prefix(16)).replacingOccurrences(of: "T", with: " ") + (DateUtils.formatShamsiOnly(tx.createdAt).map { " (\($0))" } ?? ""))
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
@@ -1597,7 +1634,7 @@ public struct ResellerCustomerDetailSheetView: View {
                 Section(header: Text("Customer Information")) {
                     Text(customer.email).font(.headline)
                     Text("Account ID: \(customer.id)").font(.caption).foregroundColor(.secondary)
-                    Text("Created: \(customer.createdAt.prefix(10))").font(.caption).foregroundColor(.secondary)
+                    Text("Created: \(DateUtils.formatDateWithShamsi(customer.createdAt))").font(.caption).foregroundColor(.secondary)
                 }
 
                 Section(header: Text("Active Subscriptions")) {
@@ -1605,7 +1642,7 @@ public struct ResellerCustomerDetailSheetView: View {
                         ForEach(subs) { s in
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(s.planName)
-                                Text("Expires: \(s.expiryDate.prefix(10))").font(.caption).foregroundColor(.secondary)
+                                Text("Expires: \(DateUtils.formatDateWithShamsi(s.expiryDate))").font(.caption).foregroundColor(.secondary)
 
                                 HStack(spacing: 12) {
                                     Button {
@@ -1869,7 +1906,7 @@ public struct ResellerConnectionQrSheetView: View {
                     }
 
                     if let exp = details.expiryDate {
-                        Text("Expires: \(exp.prefix(10))")
+                        Text("Expires: \(DateUtils.formatDateWithShamsi(exp))")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -2165,7 +2202,7 @@ public struct ResellerSubResellerDetailSheetView: View {
                     HStack {
                         Text("Joined")
                         Spacer()
-                        Text(subReseller.createdAt.prefix(10))
+                        Text(DateUtils.formatDateWithShamsi(subReseller.createdAt))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

@@ -682,9 +682,8 @@ public struct SubscriptionCardView: View {
         if days < 0 {
             return "Expired"
         }
-        let outFormat = DateFormatter()
-        outFormat.dateStyle = .medium
-        return "\(lang.tr("vpn.expires")): \(outFormat.string(from: exp)) (\(String(format: lang.tr("vpn.daysRemaining"), max(0, days))))"
+        let dateDisplay = DateUtils.formatDateWithShamsi(exp, lang: lang.currentLanguage.rawValue)
+        return "\(lang.tr("vpn.expires")): \(dateDisplay) (\(String(format: lang.tr("vpn.daysRemaining"), max(0, days))))"
     }
 
     private func formatBytes(_ bytes: Int64) -> String {
