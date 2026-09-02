@@ -53,6 +53,7 @@ public struct UserHomeView: View {
     @State private var showOrdersSheet = false
     @State private var showLanguagePicker = false
     @State private var showChangePasswordSheet = false
+    @State private var showDebugLogs = false
     @State private var showServerPickerSheet = false
     @State private var selectedServer: ServerNodeItem? = nil
 
@@ -376,6 +377,12 @@ public struct UserHomeView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
                         Button {
+                            showDebugLogs = true
+                        } label: {
+                            Image(systemName: "ladybug")
+                        }
+
+                        Button {
                             showChangePasswordSheet = true
                         } label: {
                             Image(systemName: "lock.rotation")
@@ -400,6 +407,18 @@ public struct UserHomeView: View {
             }
             .sheet(isPresented: $showChangePasswordSheet) {
                 ChangePasswordSheetView()
+            }
+            .sheet(isPresented: $showDebugLogs) {
+                NavigationStack {
+                    LogView()
+                        .navigationTitle("Debug Logs")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") { showDebugLogs = false }
+                            }
+                        }
+                }
             }
             .sheet(isPresented: $showServerPickerSheet) {
                 ServerPickerSheetView(

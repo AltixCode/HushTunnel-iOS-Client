@@ -44,6 +44,7 @@ public struct ResellerHomeView: View {
 
     // Dialog sheets
     @State private var showChangePasswordSheet = false
+    @State private var showDebugLogs = false
     @State private var showSelfSubSheet = false
     @State private var showAddCustomerSheet = false
     @State private var showCreateOrderSheet = false
@@ -195,6 +196,12 @@ public struct ResellerHomeView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
                         Button {
+                            showDebugLogs = true
+                        } label: {
+                            Image(systemName: "ladybug")
+                        }
+
+                        Button {
                             showChangePasswordSheet = true
                         } label: {
                             Image(systemName: "lock.rotation")
@@ -227,6 +234,18 @@ public struct ResellerHomeView: View {
             }
             .sheet(isPresented: $showChangePasswordSheet) {
                 ChangePasswordSheetView()
+            }
+            .sheet(isPresented: $showDebugLogs) {
+                NavigationStack {
+                    LogView()
+                        .navigationTitle("Debug Logs")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") { showDebugLogs = false }
+                            }
+                        }
+                }
             }
             .sheet(isPresented: $showServerPickerSheet) {
                 ServerPickerSheetView(
