@@ -173,6 +173,8 @@ jobs:
             EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
             security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
             
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
             echo "KEYCHAIN_CREATED=true" >> $GITHUB_ENV
             echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
           elif security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
@@ -186,6 +188,17 @@ jobs:
       - name: Build & Export Signed App Store Package
         run: |
           mkdir -p build/output
+
+          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            echo "Unlocking build signing keychain..."
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security default-keychain -s "$KEYCHAIN_PATH"
+            EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
+            security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+          fi
+
+          echo "Active codesigning identities in session:"
+          security find-identity -v -p codesigning || true
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           BUILD_NUM="${{ env.APP_BUILD_NUMBER }}"
           
