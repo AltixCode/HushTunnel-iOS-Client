@@ -297,6 +297,12 @@ public struct WalletTransactionItem: Codable, Identifiable, Hashable {
     public let description: String?
     public let counterpartEmail: String?
     public let createdAt: String
+    /// Localization key for `description` (e.g. "tx.transferOut"). Nil for
+    /// legacy rows or free-text notes — always fall back to `description`.
+    public let descriptionKey: String?
+    /// Named params for `descriptionKey` (e.g. "email", "planName"), already
+    /// locale-resolved server-side where applicable.
+    public let params: [String: String]?
 }
 
 public struct WalletTransactionsResponse: Codable {

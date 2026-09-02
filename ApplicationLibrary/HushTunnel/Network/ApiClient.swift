@@ -37,9 +37,16 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
         path: String,
         method: String = "GET",
         token: String? = nil,
-        body: [String: Any]? = nil
+        body: [String: Any]? = nil,
+        queryItems: [URLQueryItem]? = nil
     ) throws -> URLRequest {
-        guard let url = URL(string: "\(BrandConfig.apiBaseURL)\(path)") else {
+        guard var components = URLComponents(string: "\(BrandConfig.apiBaseURL)\(path)") else {
+            throw URLError(.badURL)
+        }
+        if let queryItems = queryItems, !queryItems.isEmpty {
+            components.queryItems = (components.queryItems ?? []) + queryItems
+        }
+        guard let url = components.url else {
             throw URLError(.badURL)
         }
 
@@ -58,6 +65,13 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
         }
 
         return request
+    }
+
+    /// Current app language as a `?locale=` query item, for endpoints that
+    /// resolve locale-dependent fields (e.g. plan names) server-side.
+    private func localeQueryItem() async -> URLQueryItem {
+        let raw = await LanguageManager.shared.currentLanguage.rawValue
+        return URLQueryItem(name: "locale", value: raw)
     }
 
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
@@ -105,12 +119,12 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func me() async throws -> MeResult {
-        let request = try makeRequest(path: "/api/mobile/me")
+        let request = try makeRequest(path: "/api/mobile/me", queryItems: [await localeQueryItem()])
         return try await perform(request)
     }
 
     public func plans() async throws -> [PlanInfo] {
-        let request = try makeRequest(path: "/api/mobile/plans")
+        let request = try makeRequest(path: "/api/mobile/plans", queryItems: [await localeQueryItem()])
         let res: PlansResponse = try await perform(request)
         return res.plans
     }
@@ -139,7 +153,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func orders() async throws -> [OrderItem] {
-        let request = try makeRequest(path: "/api/mobile/orders")
+        let request = try makeRequest(path: "/api/mobile/orders", queryItems: [await localeQueryItem()])
         let res: OrdersResponse = try await perform(request)
         return res.orders
     }
@@ -152,7 +166,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func resellerCustomers() async throws -> [ResellerCustomer] {
-        let request = try makeRequest(path: "/api/mobile/reseller/customers")
+        let request = try makeRequest(path: "/api/mobile/reseller/customers", queryItems: [await localeQueryItem()])
         let res: ResellerCustomersResponse = try await perform(request)
         return res.customers
     }
@@ -168,7 +182,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func resellerCustomerDetails(id: String) async throws -> ResellerCustomerDetail {
-        let request = try makeRequest(path: "/api/mobile/reseller/customers/\(id)")
+        let request = try makeRequest(path: "/api/mobile/reseller/customers/\(id)", queryItems: [await localeQueryItem()])
         let res: ResellerCustomerDetailResponse = try await perform(request)
         return res.customer
     }
@@ -188,7 +202,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func resellerOrders() async throws -> [ResellerOrder] {
-        let request = try makeRequest(path: "/api/mobile/reseller/orders")
+        let request = try makeRequest(path: "/api/mobile/reseller/orders", queryItems: [await localeQueryItem()])
         let res: ResellerOrdersResponse = try await perform(request)
         return res.orders
     }
@@ -198,7 +212,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
         if let subscriptionId = subscriptionId {
             body["subscriptionId"] = subscriptionId
         }
-        let request = try makeRequest(path: "/api/mobile/reseller/orders", method: "POST", body: body)
+        let request = try makeRequest(path: "/api/mobile/reseller/orders", method: "POST", body: body, queryItems: [await localeQueryItem()])
         return try await perform(request)
     }
 
@@ -212,7 +226,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func resellerSubscriptions() async throws -> [ResellerSubscription] {
-        let request = try makeRequest(path: "/api/mobile/reseller/subscriptions")
+        let request = try makeRequest(path: "/api/mobile/reseller/subscriptions", queryItems: [await localeQueryItem()])
         let res: ResellerSubscriptionsResponse = try await perform(request)
         return res.subscriptions
     }
@@ -243,7 +257,7 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
     }
 
     public func walletTransactions() async throws -> [WalletTransactionItem] {
-        let request = try makeRequest(path: "/api/mobile/wallet/transactions")
+        let request = try makeRequest(path: "/api/mobile/wallet/transactions", queryItems: [await localeQueryItem()])
         let res: WalletTransactionsResponse = try await perform(request)
         return res.transactions
     }

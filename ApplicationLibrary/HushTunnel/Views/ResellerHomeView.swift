@@ -834,6 +834,42 @@ public struct ResellerOrdersAndTransactionsTabView: View {
         }
     }
 
+    /// Renders a wallet transaction's description, preferring the localized
+    /// `descriptionKey`/`params` pair (server-driven i18n) and falling back
+    /// to the raw English `description` for legacy rows or free-text notes.
+    func renderedDescription(for tx: WalletTransactionItem) -> String {
+        guard let key = tx.descriptionKey else {
+            return tx.description ?? ""
+        }
+        let params = tx.params ?? [:]
+        switch key {
+        case "tx.transferOut":
+            return String(format: lang.tr(key), params["email"] ?? "")
+        case "tx.transferIn":
+            return String(format: lang.tr(key), params["email"] ?? "")
+        case "tx.deposit":
+            return String(format: lang.tr(key), params["depositId"] ?? "")
+        case "tx.planPurchase":
+            return String(format: lang.tr(key), params["planName"] ?? "")
+        case "tx.orderPayment":
+            return String(format: lang.tr(key), params["orderId"] ?? "")
+        case "tx.personalSubscription":
+            return String(format: lang.tr(key), params["planName"] ?? "")
+        case "tx.personalRenewal":
+            return String(format: lang.tr(key), params["planName"] ?? "")
+        case "tx.createdAccountOrder":
+            return String(format: lang.tr(key), params["email"] ?? "", params["planName"] ?? "")
+        case "tx.orderForCustomer":
+            return String(format: lang.tr(key), params["email"] ?? "", params["planName"] ?? "")
+        case "tx.subResellerInitialBalance":
+            return String(format: lang.tr(key), params["email"] ?? "")
+        case "tx.startupBalanceFromParent":
+            return lang.tr(key)
+        default:
+            return tx.description ?? ""
+        }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $section) {
@@ -947,10 +983,11 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                                     .foregroundColor(color)
                             }
 
-                            if let desc = tx.description, !desc.isEmpty {
+                            let desc = renderedDescription(for: tx)
+                            if !desc.isEmpty {
                                 Text(desc)
                                     .font(.subheadline)
-                                    
+
                             }
 
                             if let email = tx.counterpartEmail, !email.isEmpty {

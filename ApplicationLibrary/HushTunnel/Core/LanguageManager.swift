@@ -143,7 +143,18 @@ public struct HushTunnelStrings {
             "common.refresh": "Refresh",
             "common.close": "Close",
             "common.copy": "Copy",
-            "common.copied": "Copied to clipboard"
+            "common.copied": "Copied to clipboard",
+            "tx.transferOut": "Transfer to %@",
+            "tx.transferIn": "Transfer from %@",
+            "tx.deposit": "Wallet deposit (%@)",
+            "tx.planPurchase": "Plan purchase: %@",
+            "tx.orderPayment": "Order payment (%@)",
+            "tx.personalSubscription": "Personal VPN subscription: %@",
+            "tx.personalRenewal": "Personal VPN renewal: %@",
+            "tx.createdAccountOrder": "Created account & order: %@ (%@)",
+            "tx.orderForCustomer": "Order for %@ (%@)",
+            "tx.subResellerInitialBalance": "Initial balance for sub-reseller %@",
+            "tx.startupBalanceFromParent": "Initial startup balance from parent reseller"
         ],
         .persian: [
             "web.storeNotice": "مدیریت حساب و اشتراک",
@@ -232,7 +243,18 @@ public struct HushTunnelStrings {
             "common.refresh": "بروزرسانی",
             "common.close": "بستن",
             "common.copy": "کپی",
-            "common.copied": "کپی شد"
+            "common.copied": "کپی شد",
+            "tx.transferOut": "انتقال به %@",
+            "tx.transferIn": "انتقال از %@",
+            "tx.deposit": "واریز به کیف پول (%@)",
+            "tx.planPurchase": "خرید پلن: %@",
+            "tx.orderPayment": "پرداخت سفارش (%@)",
+            "tx.personalSubscription": "اشتراک شخصی VPN: %@",
+            "tx.personalRenewal": "تمدید اشتراک شخصی VPN: %@",
+            "tx.createdAccountOrder": "ایجاد حساب و سفارش: %@ (%@)",
+            "tx.orderForCustomer": "سفارش برای %@ (%@)",
+            "tx.subResellerInitialBalance": "موجودی اولیه برای نماینده زیرمجموعه %@",
+            "tx.startupBalanceFromParent": "موجودی اولیه راه‌اندازی از نماینده والد"
         ],
         .russian: [
             "web.storeNotice": "Управление аккаунтом и подпиской",
@@ -321,7 +343,18 @@ public struct HushTunnelStrings {
             "common.refresh": "Обновить",
             "common.close": "Закрыть",
             "common.copy": "Копировать",
-            "common.copied": "Скопировано"
+            "common.copied": "Скопировано",
+            "tx.transferOut": "Перевод пользователю %@",
+            "tx.transferIn": "Перевод от %@",
+            "tx.deposit": "Пополнение кошелька (%@)",
+            "tx.planPurchase": "Покупка тарифа: %@",
+            "tx.orderPayment": "Оплата заказа (%@)",
+            "tx.personalSubscription": "Личная подписка VPN: %@",
+            "tx.personalRenewal": "Продление личной подписки VPN: %@",
+            "tx.createdAccountOrder": "Создан аккаунт и заказ: %@ (%@)",
+            "tx.orderForCustomer": "Заказ для %@ (%@)",
+            "tx.subResellerInitialBalance": "Начальный баланс для субреселлера %@",
+            "tx.startupBalanceFromParent": "Начальный баланс от родительского реселлера"
         ],
         .chinese: [
             "web.storeNotice": "账户与订阅管理",
@@ -400,7 +433,18 @@ public struct HushTunnelStrings {
             "common.refresh": "刷新",
             "common.close": "关闭",
             "common.copy": "复制",
-            "common.copied": "已复制"
+            "common.copied": "已复制",
+            "tx.transferOut": "转账给 %@",
+            "tx.transferIn": "来自 %@ 的转账",
+            "tx.deposit": "钱包充值 (%@)",
+            "tx.planPurchase": "购买套餐：%@",
+            "tx.orderPayment": "订单付款 (%@)",
+            "tx.personalSubscription": "个人 VPN 订阅：%@",
+            "tx.personalRenewal": "个人 VPN 续费：%@",
+            "tx.createdAccountOrder": "创建账户及订单：%@ (%@)",
+            "tx.orderForCustomer": "为 %@ 下单 (%@)",
+            "tx.subResellerInitialBalance": "下级代理 %@ 的初始余额",
+            "tx.startupBalanceFromParent": "来自上级代理的初始启动余额"
         ],
         .turkish: [
             "web.storeNotice": "Hesap ve Abonelik Yönetimi",
@@ -488,7 +532,18 @@ public struct HushTunnelStrings {
             "common.refresh": "Yenile",
             "common.close": "Kapat",
             "common.copy": "Kopyala",
-            "common.copied": "Kopyalandı"
+            "common.copied": "Kopyalandı",
+            "tx.transferOut": "%@ kullanıcısına transfer",
+            "tx.transferIn": "%@ kullanıcısından transfer",
+            "tx.deposit": "Cüzdan yüklemesi (%@)",
+            "tx.planPurchase": "Plan satın alma: %@",
+            "tx.orderPayment": "Sipariş ödemesi (%@)",
+            "tx.personalSubscription": "Kişisel VPN aboneliği: %@",
+            "tx.personalRenewal": "Kişisel VPN yenileme: %@",
+            "tx.createdAccountOrder": "Hesap ve sipariş oluşturuldu: %@ (%@)",
+            "tx.orderForCustomer": "%@ için sipariş (%@)",
+            "tx.subResellerInitialBalance": "%@ alt bayisi için başlangıç bakiyesi",
+            "tx.startupBalanceFromParent": "Üst bayiden başlangıç bakiyesi"
         ]
     ]
 
