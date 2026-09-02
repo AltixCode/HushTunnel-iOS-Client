@@ -164,14 +164,19 @@ jobs:
           mkdir -p build/output
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           
-          if [ "$SIGNING_CONFIGURED" = "true" ]; then
-            echo "Building with Code Signing for App Store / TestFlight..."
+          if [ "$API_KEY_CONFIGURED" = "true" ]; then
+            echo "Building and signing with App Store Connect API Key..."
+            AUTH_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+            
             xcodebuild archive \
               -project sing-box.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
               -destination 'generic/platform=iOS' \
               -allowProvisioningUpdates \
+              -authenticationKeyPath "$AUTH_KEY_PATH" \
+              -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+              -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" \
               MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
               CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
               
@@ -195,27 +200,27 @@ jobs:
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
-              -exportOptionsPlist build/exportOptions.plist
+              -exportOptionsPlist build/exportOptions.plist \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$AUTH_KEY_PATH" \
+              -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+              -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" || true
               
-            # Copy versioned IPA alias
             cp build/output/HushTunnel.ipa build/output/HushTunnel-${VERSION}.ipa || true
               
           else
-            echo "Building iOS App Bundle (Unsigned/Simulator)..."
-            xcodebuild build \
+            echo "Building iOS App Archive (Unsigned/Development fallback)..."
+            xcodebuild archive \
               -project sing-box.xcodeproj \
               -scheme SFI \
+              -archivePath build/HushTunnel.xcarchive \
               -destination 'generic/platform=iOS' \
-              -derivedDataPath build/DerivedData \
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
               MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
               CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
               
             mkdir -p build/output/Payload
-            cp -r build/DerivedData/Build/Products/Debug-iphoneos/HushTunnel.app build/output/Payload/ || \
-            cp -r build/DerivedData/Build/Products/Release-iphoneos/HushTunnel.app build/output/Payload/ || \
-            cp -r build/DerivedData/Build/Products/*-iphoneos/*.app build/output/Payload/ || true
-            
+            cp -r build/HushTunnel.xcarchive/Products/Applications/HushTunnel.app build/output/Payload/ || true
             cd build/output && zip -q -r HushTunnel.ipa Payload && cp HushTunnel.ipa HushTunnel-${VERSION}.ipa && cd ../..
           fi
 
