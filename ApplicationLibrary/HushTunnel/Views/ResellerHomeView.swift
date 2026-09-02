@@ -63,7 +63,7 @@ public struct ResellerHomeView: View {
     public init() {}
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             TabView(selection: $selectedTab) {
                 // Tab 0: Personal VPN
                 ResellerPersonalVpnTabView(
@@ -1074,7 +1074,7 @@ public struct ResellerAddSubResellerSheetView: View {
     private var overBudget: Bool { initialBalance > balance }
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 if let pwd = createdPassword {
                     Section(header: Text(lang.tr("reseller.addSubReseller"))) {
@@ -1175,7 +1175,7 @@ public struct ResellerSelfSubSheetView: View {
     @State private var errorMessage: String?
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Choose Personal VPN Plan")) {
                     ForEach(plans) { plan in
@@ -1258,7 +1258,7 @@ public struct ResellerAddCustomerSheetView: View {
     @State private var errorMessage: String?
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 if let pwd = createdPassword {
                     Section(header: Text("Customer Account Created")) {
@@ -1355,7 +1355,7 @@ public struct ResellerCreateOrderSheetView: View {
     @State private var errorMessage: String?
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Customer Email")) {
                     TextField("Enter or select customer email", text: $email)
@@ -1479,7 +1479,7 @@ public struct ResellerDepositSheetView: View {
     @State private var errorMessage: String?
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Deposit Amount (USD)")) {
                     TextField("Amount in USD", text: $amountString)
@@ -1592,7 +1592,7 @@ public struct ResellerCustomerDetailSheetView: View {
     @State private var copiedSubscriptionId: String?
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("Customer Information")) {
                     Text(customer.email).font(.headline)
@@ -1754,7 +1754,7 @@ public struct ResellerConnectionQrSheetView: View {
     @State private var copiedText: String?
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     VStack(spacing: 4) {
@@ -1990,7 +1990,7 @@ public struct ResellerTransferFundsSheetView: View {
     private var remainingBalance: Double { max(0, balance - amount) }
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text(lang.tr("reseller.transferFunds")), footer: Text("Instant zero-fee transfer to any user or sub-reseller")) {
                     TextField(lang.tr("reseller.transfer.recipientEmail"), text: $recipientEmail)
@@ -2130,7 +2130,7 @@ public struct ResellerSubResellerDetailSheetView: View {
     @ObservedObject var lang = LanguageManager.shared
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text(lang.tr("reseller.subresellers.details"))) {
                     VStack(alignment: .leading, spacing: 4) {

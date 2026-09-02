@@ -14,7 +14,7 @@ public struct ChangePasswordSheetView: View {
     public init() {}
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text(lang.tr("account.changePassword"))) {
                     SecureField(lang.tr("account.currentPassword"), text: $currentPassword)

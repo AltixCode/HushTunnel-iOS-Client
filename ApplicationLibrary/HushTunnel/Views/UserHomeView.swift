@@ -39,7 +39,7 @@ public struct UserHomeView: View {
     public init() {}
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 Color(uiColor: .systemGroupedBackground)
                     .ignoresSafeArea()
@@ -521,7 +521,7 @@ public struct OrdersListView: View {
     public init() {}
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             Group {
                 if isLoading {
                     ProgressView()

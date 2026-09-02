@@ -61,7 +61,7 @@ public struct ServerPickerSheetView: View {
     }
 
     public var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 // Search Field
                 HStack {
