@@ -250,7 +250,7 @@ jobs:
           fi
 
       - name: Upload to App Store Connect / TestFlight
-        if: env.API_KEY_CONFIGURED == true && (github.ref == refs/heads/main || inputs.upload_to_app_store == true || startsWith(github.ref, refs/tags/))
+        if: env.API_KEY_CONFIGURED == 'true' && (github.ref == 'refs/heads/main' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
         run: |
           echo "Uploading IPA to App Store Connect / TestFlight via altool..."
           xcrun altool --upload-app \
