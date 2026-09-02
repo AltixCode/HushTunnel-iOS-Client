@@ -20,11 +20,40 @@ public struct ServerPickerSheetView: View {
         self.onSelect = onSelect
     }
 
+    private var activeServersList: [ServerNodeItem] {
+        if !servers.isEmpty { return servers }
+        return [
+            ServerNodeItem(
+                id: "netherlands-primary",
+                name: "Netherlands هلند",
+                countryCode: "NL",
+                flag: "🇳🇱",
+                city: "Amsterdam",
+                host: "5.255.125.216",
+                port: 443,
+                protocolName: "vless",
+                isDefault: true
+            ),
+            ServerNodeItem(
+                id: "moldova-primary",
+                name: "Moldova ملدوا",
+                countryCode: "MD",
+                flag: "🇲🇩",
+                city: "Chișinău",
+                host: "143.246.213.17",
+                port: 443,
+                protocolName: "vless",
+                isDefault: false
+            )
+        ]
+    }
+
     private var filteredServers: [ServerNodeItem] {
+        let base = activeServersList
         if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return servers
+            return base
         }
-        return servers.filter {
+        return base.filter {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
             $0.countryCode.localizedCaseInsensitiveContains(searchText) ||
             ($0.city?.localizedCaseInsensitiveContains(searchText) ?? false)

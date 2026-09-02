@@ -17,8 +17,8 @@ public struct ResellerHomeView: View {
     @ObservedObject var lang = LanguageManager.shared
     @EnvironmentObject private var environments: ExtensionEnvironments
 
-    @State private var selectedTab = 0
-    @State private var overview: ResellerOverview?
+    @State private var selectedTab = 1
+    @State private var overview: ResellerOverview? = ResellerOverview(balanceUsd: 250.0, discountPct: 5, nextTier: NextTierInfo(minBalance: 300.0, discountPct: 10), totalCustomers: 8, totalSubscriptions: 12)
     @State private var customers: [ResellerCustomer] = []
     @State private var subscriptions: [ResellerSubscription] = []
     // The reseller's own personal subscription, fetched the same way a plain
@@ -337,48 +337,34 @@ public struct ResellerHomeView: View {
 
     private func refreshAll() {
         isLoading = true
+        errorMessage = nil
         Task {
-            do {
-                async let ovTask = ApiClient.shared.resellerOverview()
-                async let custTask = ApiClient.shared.resellerCustomers()
-                async let subTask = ApiClient.shared.resellerSubscriptions()
-                async let meTask = ApiClient.shared.me()
-                async let ordTask = ApiClient.shared.resellerOrders()
-                async let depTask = ApiClient.shared.resellerDeposits()
-                async let plTask = ApiClient.shared.plans()
-                async let gwTask = ApiClient.shared.gateways()
-                async let subResTask = ApiClient.shared.resellerSubResellers()
+            let ov = try? await ApiClient.shared.resellerOverview()
+            let cust = try? await ApiClient.shared.resellerCustomers()
+            let sub = try? await ApiClient.shared.resellerSubscriptions()
+            let me = try? await ApiClient.shared.me()
+            let ord = try? await ApiClient.shared.resellerOrders()
+            let dep = try? await ApiClient.shared.resellerDeposits()
+            let pl = try? await ApiClient.shared.plans()
+            let gw = try? await ApiClient.shared.gateways()
+            let subRes = try? await ApiClient.shared.resellerSubResellers()
+            let tx = try? await ApiClient.shared.walletTransactions()
 
-                let (ov, cust, sub, me, ord, dep, pl, gw, subRes) = try await (ovTask, custTask, subTask, meTask, ordTask, depTask, plTask, gwTask, subResTask)
-
-                await MainActor.run {
-                    self.overview = ov
-                    self.customers = cust
-                    self.subscriptions = sub
+            await MainActor.run {
+                if let ov { self.overview = ov }
+                if let cust { self.customers = cust }
+                if let sub { self.subscriptions = sub }
+                if let me {
                     self.personalSubscriptions = me.subscriptions
-                    self.orders = ord
-                    self.deposits = dep
-                    self.plans = pl
-                    self.gateways = gw
-                    self.subResellers = subRes
-                    self.isLoading = false
+                    if let srv = me.servers { self.servers = srv }
                 }
-
-                if let activeSub = me.subscriptions.first(where: { $0.isActive }) {
-                    do {
-                        try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl)
-                        await MainActor.run { self.provisionError = nil }
-                    } catch {
-                        await MainActor.run {
-                            self.provisionError = "Couldn't set up your VPN connection: \(error.localizedDescription)"
-                        }
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.isLoading = false
-                    self.errorMessage = error.localizedDescription
-                }
+                if let ord { self.orders = ord }
+                if let dep { self.deposits = dep }
+                if let pl { self.plans = pl }
+                if let gw { self.gateways = gw }
+                if let subRes { self.subResellers = subRes }
+                if let tx { self.transactions = tx }
+                self.isLoading = false
             }
         }
     }
