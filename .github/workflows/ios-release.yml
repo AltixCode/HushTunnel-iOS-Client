@@ -216,26 +216,49 @@ jobs:
           security find-identity -v -p codesigning || true
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           BUILD_NUM="${{ env.APP_BUILD_NUMBER }}"
-          
+
+          # NOTE: archiving must produce a *signed* app with the real entitlements
+          # (com.apple.developer.networking.networkextension, App Groups, etc.) baked
+          # in at compile time. Xcode only embeds those from a provisioning profile
+          # that actually declares the matching capabilities; without one it silently
+          # omits them, and no amount of re-signing at export time can add them back
+          # after the fact. Previously this step fell back to an UNSIGNED build
+          # (`CODE_SIGNING_ALLOWED=NO`) on any failure, which always shipped an
+          # archive with no entitlements at all -> "Missing Entitlement" on upload.
+          # Fix: use automatic signing with -allowProvisioningUpdates (backed by the
+          # App Store Connect API key, same as the export step below) so Xcode
+          # creates/updates provisioning profiles with the right capabilities itself.
+          # Never fall back to an unsigned archive for an App Store build.
+          AUTH_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
+
           echo "Building Release xcarchive with Xcode..."
-          xcodebuild archive \
-            -project sing-box.xcodeproj \
-            -scheme SFI \
-            -archivePath build/HushTunnel.xcarchive \
-            -destination "generic/platform=iOS" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="8Q8Y559285" \
-            MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUM" || \
-          xcodebuild archive \
-            -project sing-box.xcodeproj \
-            -scheme SFI \
-            -archivePath build/HushTunnel.xcarchive \
-            -destination "generic/platform=iOS" \
-            CODE_SIGNING_ALLOWED=NO \
-            MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUM"
+          if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
+            echo "Archiving with automatic signing + App Store Connect API key (-allowProvisioningUpdates)..."
+            xcodebuild archive \
+              -project sing-box.xcodeproj \
+              -scheme SFI \
+              -archivePath build/HushTunnel.xcarchive \
+              -destination "generic/platform=iOS" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$AUTH_KEY_PATH" \
+              -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+              -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM="8Q8Y559285" \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$BUILD_NUM"
+          else
+            echo "No App Store Connect API key available - archiving with automatic signing against locally installed profiles/identities..."
+            xcodebuild archive \
+              -project sing-box.xcodeproj \
+              -scheme SFI \
+              -archivePath build/HushTunnel.xcarchive \
+              -destination "generic/platform=iOS" \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM="8Q8Y559285" \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$BUILD_NUM"
+          fi
 
           echo "Preparing exportOptions.plist for App Store..."
           cat << PLIST_EOF > build/exportOptions.plist
