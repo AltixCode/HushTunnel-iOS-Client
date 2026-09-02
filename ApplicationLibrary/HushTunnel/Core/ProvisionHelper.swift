@@ -23,7 +23,11 @@ public enum ProvisionHelper {
     /// pattern as `NewProfileViewModel.createProfileBackground()`'s `.remote`
     /// branch — reusing the app's own real, existing profile pipeline rather
     /// than a bespoke one.
-    public static func provisionSubscription(subscriptionUrl: String, preferredServerId: String? = nil) async throws {
+    public static func provisionSubscription(
+        subscriptionUrl: String,
+        preferredServerId: String? = nil,
+        reloadRunningProfile: Bool = true
+    ) async throws {
         var baseRemoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "sing-box")
         if let preferred = preferredServerId, !preferred.isEmpty {
             baseRemoteURL = baseRemoteURL?.appendingQueryItem(name: "server", value: preferred)
@@ -32,14 +36,10 @@ public enum ProvisionHelper {
             throw NSError(domain: "ProvisionHelper", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid subscription URL"])
         }
 
-        if let existing = try await ProfileManager.get(by: profileName) {
-            existing.remoteURL = remoteURL.absoluteString
-            try await ProfileManager.update(existing)
-            try await existing.updateRemoteProfile()
-            await SharedPreferences.selectedProfileID.set(existing.mustID)
-            return
-        }
-
+        // Download and validate the requested server configuration before
+        // changing the managed profile's URL. Otherwise a failed refresh can
+        // leave the UI pointing at one server while the config file still
+        // contains the previously selected server.
         let remoteContent = try await HTTPClient.getStringAsync(remoteURL.absoluteString)
         try await BlockingIO.run {
             var error: NSError?
@@ -47,6 +47,18 @@ public enum ProvisionHelper {
             if let error {
                 throw error
             }
+        }
+
+        if let existing = try await ProfileManager.get(by: profileName) {
+            existing.remoteURL = remoteURL.absoluteString
+            try await ProfileManager.update(existing)
+            try await existing.updateRemoteProfile(
+                content: remoteContent,
+                reloadIfSelected: reloadRunningProfile
+            )
+            await SharedPreferences.selectedProfileID.set(existing.mustID)
+            ServerSelectionStore.selectedServerID = preferredServerId
+            return
         }
 
         let nextProfileID = try await ProfileManager.nextID()
@@ -68,6 +80,49 @@ public enum ProvisionHelper {
         )
         try await ProfileManager.create(profile)
         await SharedPreferences.selectedProfileID.set(profile.mustID)
+        ServerSelectionStore.selectedServerID = preferredServerId
+    }
+}
+
+/// Persists the server that was successfully written to the managed profile.
+/// A saved value is always revalidated against the latest server list before
+/// it is displayed or provisioned.
+public enum ServerSelectionStore {
+    private static let key = "io.hushtunnel.selected-server-id"
+
+    public static var selectedServerID: String? {
+        get { UserDefaults.standard.string(forKey: key)?.nilIfBlank }
+        set {
+            if let newValue = newValue?.nilIfBlank {
+                UserDefaults.standard.set(newValue, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
+    public static func resolve(
+        servers: [ServerNodeItem],
+        currentServerID: String? = nil
+    ) -> ServerNodeItem? {
+        if let currentServerID,
+           let current = servers.first(where: { $0.id == currentServerID })
+        {
+            return current
+        }
+        if let saved = selectedServerID,
+           let persisted = servers.first(where: { $0.id == saved })
+        {
+            return persisted
+        }
+        return servers.first(where: { $0.isDefault == true }) ?? servers.first
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 }
 

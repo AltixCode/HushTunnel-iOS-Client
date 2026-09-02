@@ -2,7 +2,7 @@ import Foundation
 
 public enum BrandConfig {
     public static let appName = "HushTunnel"
-    #if DEBUG
+    #if DEBUG && targetEnvironment(simulator)
     public static let apiBaseURL = "http://localhost:3003"
     #else
     public static let apiBaseURL = "https://www.hushtunnel.com"

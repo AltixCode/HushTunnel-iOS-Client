@@ -68,6 +68,7 @@ public struct AuthView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 TextField("user@example.com", text: $email)
+                                    .accessibilityIdentifier("hush.auth.email")
                                     .textContentType(.emailAddress)
                                     .keyboardType(.emailAddress)
                                     .autocapitalization(.none)
@@ -83,6 +84,7 @@ public struct AuthView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 SecureField("••••••••", text: $password)
+                                    .accessibilityIdentifier("hush.auth.password")
                                     .textContentType(isLogin ? .password : .newPassword)
                                     .padding(12)
                                     .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -107,6 +109,7 @@ public struct AuthView: View {
                                 .cornerRadius(12)
                             }
                             .disabled(!isFormValid || isLoading)
+                            .accessibilityIdentifier("hush.auth.submit")
                             .padding(.top, 8)
 
                             // Toggle Switch

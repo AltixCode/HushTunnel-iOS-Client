@@ -3,12 +3,19 @@ import GRDB
 import Libbox
 
 public extension Profile {
-    nonisolated func updateRemoteProfile() async throws {
+    nonisolated func updateRemoteProfile(
+        content suppliedContent: String? = nil,
+        reloadIfSelected: Bool = true
+    ) async throws {
         if type != .remote {
             return
         }
-        let url = remoteURL
-        let remoteContent = try await HTTPClient.getStringAsync(url)
+        let remoteContent: String
+        if let suppliedContent {
+            remoteContent = suppliedContent
+        } else {
+            remoteContent = try await HTTPClient.getStringAsync(remoteURL)
+        }
         try await BlockingIO.run {
             var error: NSError?
             LibboxCheckConfig(remoteContent, &error)
@@ -27,7 +34,9 @@ public extension Profile {
             }
         } catch {}
         try await writeAsync(remoteContent)
-        try await onProfileUpdated()
+        if reloadIfSelected {
+            try await onProfileUpdated()
+        }
     }
 
     nonisolated func onProfileUpdated() async throws {
