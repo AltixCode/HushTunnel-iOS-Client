@@ -324,6 +324,18 @@ public class ExtensionEnvironments: ObservableObject {
                 extensionProfileLoading = false
             }
         } else {
+            // Auto-install network extension configuration on first launch
+            do {
+                try await ExtensionProfile.install()
+                if let installedProfile = try await ExtensionProfile.load() {
+                    installedProfile.register()
+                    extensionProfile = installedProfile
+                    extensionProfileLoading = false
+                    return
+                }
+            } catch {
+                NSLog("Auto-install network extension error: \(error)")
+            }
             extensionProfile = nil
             extensionProfileLoading = false
         }

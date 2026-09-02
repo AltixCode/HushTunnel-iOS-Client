@@ -91,14 +91,20 @@ public struct UserHomeView: View {
                                     .padding(.top, 24)
                                 ConnectStatusLabel(profile: profile)
                             } else {
-                                // No VPN extension registered yet (first launch, or
-                                // still installing) — same disabled fallback
-                                // StartStopButton uses elsewhere in the app.
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.4))
-                                        .frame(width: 140, height: 140)
-                                    ProgressView()
+                                Button {
+                                    Task {
+                                        try? await ExtensionProfile.install()
+                                        await environments.reload()
+                                    }
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.accentColor.opacity(0.15))
+                                            .frame(width: 140, height: 140)
+                                        Image(systemName: "power")
+                                            .font(.system(size: 48, weight: .semibold))
+                                            .foregroundColor(.accentColor)
+                                    }
                                 }
                                 .padding(.top, 24)
                                 Text(lang.tr("vpn.disconnected"))
