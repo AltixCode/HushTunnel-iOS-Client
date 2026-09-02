@@ -56,6 +56,22 @@ public struct UserHomeView: View {
     @State private var showServerPickerSheet = false
     @State private var selectedServer: ServerNodeItem? = nil
 
+    @State private var isTestingConnection = false
+    @State private var testResult: ConnectionTestResult? = nil
+
+    struct ConnectionTestResult: Equatable {
+        enum Status {
+            case success
+            case warning
+            case error
+        }
+        let status: Status
+        let ip: String
+        let latencyMs: Int
+        let serverMatches: Bool
+        let message: String
+    }
+
     private var currentDisplayServer: ServerNodeItem {
         if let selected = selectedServer { return selected }
         if let sList = meResult?.servers, !sList.isEmpty {
@@ -91,6 +107,50 @@ public struct UserHomeView: View {
                                 ConnectCircleButton(profile: profile, isProvisioning: isProvisioning)
                                     .padding(.top, 24)
                                 ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
+
+                                // Test Connection Button & Result
+                                VStack(spacing: 8) {
+                                    Button {
+                                        testConnection()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            if isTestingConnection {
+                                                ProgressView()
+                                                    .scaleEffect(0.8)
+                                            } else {
+                                                Image(systemName: "bolt.horizontal.circle.fill")
+                                                    .font(.system(size: 14))
+                                            }
+                                            Text(isTestingConnection ? lang.tr("vpn.testing") : lang.tr("vpn.testConnection"))
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color.accentColor.opacity(0.12))
+                                        .foregroundColor(.accentColor)
+                                        .cornerRadius(20)
+                                    }
+                                    .disabled(isTestingConnection)
+
+                                    if let res = testResult {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: res.status == .success ? "checkmark.shield.fill" : (res.status == .warning ? "exclamationmark.shield.fill" : "xmark.octagon.fill"))
+                                                .font(.caption)
+                                                .foregroundColor(res.status == .success ? .green : (res.status == .warning ? .orange : .red))
+
+                                            Text(res.message)
+                                                .font(.caption2)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(res.status == .success ? .green : (res.status == .warning ? .orange : .red))
+                                                .multilineTextAlignment(.center)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background((res.status == .success ? Color.green : (res.status == .warning ? Color.orange : Color.red)).opacity(0.1))
+                                        .cornerRadius(10)
+                                    }
+                                }
                             } else {
                                 Button {
                                     Task {
@@ -357,6 +417,74 @@ public struct UserHomeView: View {
                 await environments.reload()
             }
             .onAppear(perform: refreshData)
+        }
+    }
+
+    private func testConnection() {
+        guard !isTestingConnection else { return }
+        isTestingConnection = true
+        testResult = nil
+
+        let expectedHost = currentDisplayServer.host
+
+        Task {
+            let start = DispatchTime.now()
+            do {
+                var req = URLRequest(url: URL(string: "https://api.ipify.org?format=json")!)
+                req.timeoutInterval = 7
+                req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+                let (data, response) = try await URLSession.shared.data(for: req)
+                let end = DispatchTime.now()
+                let latency = Int(Double(end.uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+
+                // Secondary data verification: send request to apple.com
+                var appleReq = URLRequest(url: URL(string: "https://www.apple.com")!)
+                appleReq.timeoutInterval = 6
+                _ = try? await URLSession.shared.data(for: appleReq)
+
+                guard let httpRes = response as? HTTPURLResponse, (200...299).contains(httpRes.statusCode),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let ip = json["ip"] as? String else {
+                    throw NSError(domain: "TestConnection", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid IP response"])
+                }
+
+                let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+                let cleanExpected = expectedHost.trimmingCharacters(in: .whitespacesAndNewlines)
+                let matches = (cleanIp == cleanExpected)
+
+                await MainActor.run {
+                    if matches {
+                        self.testResult = ConnectionTestResult(
+                            status: .success,
+                            ip: cleanIp,
+                            latencyMs: latency,
+                            serverMatches: true,
+                            message: String(format: lang.tr("vpn.testSuccess"), latency, cleanIp)
+                        )
+                    } else {
+                        self.testResult = ConnectionTestResult(
+                            status: .warning,
+                            ip: cleanIp,
+                            latencyMs: latency,
+                            serverMatches: false,
+                            message: String(format: lang.tr("vpn.testIpMismatch"), cleanIp)
+                        )
+                    }
+                    self.isTestingConnection = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.testResult = ConnectionTestResult(
+                        status: .error,
+                        ip: "",
+                        latencyMs: 0,
+                        serverMatches: false,
+                        message: lang.tr("vpn.testFailed")
+                    )
+                    self.isTestingConnection = false
+                }
+            }
         }
     }
 
