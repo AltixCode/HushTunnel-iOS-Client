@@ -225,7 +225,7 @@ jobs:
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="NG7T47F736" \
+            DEVELOPMENT_TEAM="8Q8Y559285" \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$BUILD_NUM" || \
           xcodebuild archive \
@@ -246,7 +246,7 @@ jobs:
               <key>method</key>
               <string>app-store-connect</string>
               <key>teamID</key>
-              <string>NG7T47F736</string>
+              <string>8Q8Y559285</string>
               <key>signingStyle</key>
               <string>automatic</string>
               <key>stripSwiftSymbols</key>
