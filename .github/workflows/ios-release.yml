@@ -164,23 +164,19 @@ jobs:
           mkdir -p build/output
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           
-          if [ "$API_KEY_CONFIGURED" = "true" ]; then
-            echo "Building and signing with App Store Connect API Key..."
-            AUTH_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+          echo "Building iOS Release Archive..."
+          xcodebuild archive \
+            -project sing-box.xcodeproj \
+            -scheme SFI \
+            -archivePath build/HushTunnel.xcarchive \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
+            CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
             
-            xcodebuild archive \
-              -project sing-box.xcodeproj \
-              -scheme SFI \
-              -archivePath build/HushTunnel.xcarchive \
-              -destination 'generic/platform=iOS' \
-              -allowProvisioningUpdates \
-              -authenticationKeyPath "$AUTH_KEY_PATH" \
-              -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
-              -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" \
-              MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
-              CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
-              
-            echo "Exporting IPA package..."
+          if [ "$API_KEY_CONFIGURED" = "true" ]; then
+            echo "Exporting signed IPA for App Store with API Key..."
+            AUTH_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
             cat << 'PLIST_EOF' > build/exportOptions.plist
             <?xml version="1.0" encoding="UTF-8"?>
             <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -205,24 +201,18 @@ jobs:
               -authenticationKeyPath "$AUTH_KEY_PATH" \
               -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
               -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" || true
-              
-            cp build/output/HushTunnel.ipa build/output/HushTunnel-${VERSION}.ipa || true
-              
-          else
-            echo "Building iOS App Archive (Unsigned/Development fallback)..."
-            xcodebuild archive \
-              -project sing-box.xcodeproj \
-              -scheme SFI \
-              -archivePath build/HushTunnel.xcarchive \
-              -destination 'generic/platform=iOS' \
-              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-              MARKETING_VERSION="${{ env.APP_MARKETING_VERSION }}" \
-              CURRENT_PROJECT_VERSION="${{ env.APP_BUILD_NUMBER }}"
-              
+          fi
+          
+          # Fallback package generation if export didn't create IPA
+          if [ ! -f "build/output/HushTunnel.ipa" ]; then
+            echo "Packaging IPA from xcarchive bundle..."
             mkdir -p build/output/Payload
             cp -r build/HushTunnel.xcarchive/Products/Applications/HushTunnel.app build/output/Payload/ || true
-            cd build/output && zip -q -r HushTunnel.ipa Payload && cp HushTunnel.ipa HushTunnel-${VERSION}.ipa && cd ../..
+            cd build/output && zip -q -r HushTunnel.ipa Payload && cd ../..
           fi
+          
+          cp build/output/HushTunnel.ipa build/output/HushTunnel-${VERSION}.ipa || true
+          ls -lh build/output/
 
       - name: Upload to App Store Connect / TestFlight
         if: env.API_KEY_CONFIGURED == 'true' && (github.ref == 'refs/heads/main' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
