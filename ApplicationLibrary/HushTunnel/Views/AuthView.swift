@@ -128,6 +128,9 @@ public struct AuthView: View {
 
                         Spacer()
                     }
+                    .frame(maxWidth: 480)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
                 }
             }
             .environment(\.layoutDirection, lang.layoutDirection)

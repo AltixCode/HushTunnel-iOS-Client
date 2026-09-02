@@ -252,6 +252,8 @@ public struct UserHomeView: View {
 
                         Spacer(minLength: 32)
                     }
+                    .frame(maxWidth: 600)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .environment(\.layoutDirection, lang.layoutDirection)
