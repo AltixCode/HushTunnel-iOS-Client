@@ -165,6 +165,7 @@ jobs:
               security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security -A || true
             fi
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
+            security default-keychain -s "$KEYCHAIN_PATH" || true
             echo "Keychain identities after import:"
             security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
 
@@ -232,10 +233,11 @@ jobs:
           # Clean leading whitespace in generated plist
           sed -i "" "s/^[ 	]*//" build/exportOptions.plist || true
 
-          AUTH_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+          AUTH_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
 
+          echo "Checking App Store Connect API Key at: $AUTH_KEY_PATH"
           if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
-            echo "Exporting signed App Store IPA with automatic provisioning..."
+            echo "Exporting signed App Store IPA with automatic provisioning from App Store Connect..."
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
@@ -245,7 +247,7 @@ jobs:
               -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
               -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
           else
-            echo "Exporting with local provisioning..."
+            echo "Exporting with local keychain & provisioning profiles..."
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
