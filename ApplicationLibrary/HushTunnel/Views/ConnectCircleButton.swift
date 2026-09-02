@@ -11,16 +11,18 @@ import SwiftUI
 /// don't propagate through the outer object's `objectWillChange` on their own.
 public struct ConnectCircleButton: View {
     @ObservedObject var profile: ExtensionProfile
+    var isProvisioning: Bool
     @State private var isStarting = false
     @State private var alert: AlertState?
     @ObservedObject var lang = LanguageManager.shared
 
-    public init(profile: ExtensionProfile) {
+    public init(profile: ExtensionProfile, isProvisioning: Bool = false) {
         self.profile = profile
+        self.isProvisioning = isProvisioning
     }
 
     private var isConnected: Bool { profile.status == .connected || profile.status == .reasserting }
-    private var isConnecting: Bool { isStarting || profile.status == .connecting }
+    private var isConnecting: Bool { isStarting || profile.status == .connecting || isProvisioning }
 
     public var body: some View {
         Button(action: toggle) {
@@ -41,7 +43,7 @@ public struct ConnectCircleButton: View {
                             .foregroundColor(.white)
                     }
 
-                    Text(isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.disconnect") : lang.tr("vpn.connect")))
+                    Text(isProvisioning ? lang.tr("vpn.preparing") : (isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.disconnect") : lang.tr("vpn.connect"))))
                         .font(.caption)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
@@ -59,6 +61,11 @@ public struct ConnectCircleButton: View {
                     try await profile.stop()
                 } else {
                     await MainActor.run { isStarting = true }
+                    if await SharedPreferences.selectedProfileID.get() == 0 {
+                        if let activeProfile = try await ProfileManager.get(by: ProvisionHelper.profileName) {
+                            await SharedPreferences.selectedProfileID.set(activeProfile.mustID)
+                        }
+                    }
                     try await profile.start()
                 }
             } catch {
@@ -74,14 +81,16 @@ public struct ConnectCircleButton: View {
 /// Status dot + label matching the branded status row under the connect circle.
 public struct ConnectStatusLabel: View {
     @ObservedObject var profile: ExtensionProfile
+    var isProvisioning: Bool
     @ObservedObject var lang = LanguageManager.shared
 
-    public init(profile: ExtensionProfile) {
+    public init(profile: ExtensionProfile, isProvisioning: Bool = false) {
         self.profile = profile
+        self.isProvisioning = isProvisioning
     }
 
     private var isConnected: Bool { profile.status == .connected || profile.status == .reasserting }
-    private var isConnecting: Bool { profile.status == .connecting }
+    private var isConnecting: Bool { profile.status == .connecting || isProvisioning }
 
     public var body: some View {
         HStack(spacing: 8) {
@@ -89,7 +98,7 @@ public struct ConnectStatusLabel: View {
                 .fill(isConnected ? Color.green : (isConnecting ? Color.orange : Color.gray))
                 .frame(width: 10, height: 10)
 
-            Text(isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.connected") : lang.tr("vpn.disconnected")))
+            Text(isProvisioning ? lang.tr("vpn.preparing") : (isConnecting ? lang.tr("vpn.connecting") : (isConnected ? lang.tr("vpn.connected") : lang.tr("vpn.disconnected"))))
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundColor(.secondary)

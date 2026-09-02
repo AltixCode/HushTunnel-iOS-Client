@@ -46,6 +46,7 @@ public struct UserHomeView: View {
         ]
     )
     @State private var isLoading = false
+    @State private var isProvisioning = true
     @State private var errorMessage: String?
     @State private var provisionError: String?
 
@@ -87,9 +88,9 @@ public struct UserHomeView: View {
                         // Status & Connect Section
                         VStack(spacing: 24) {
                             if let profile = environments.extensionProfile {
-                                ConnectCircleButton(profile: profile)
+                                ConnectCircleButton(profile: profile, isProvisioning: isProvisioning)
                                     .padding(.top, 24)
-                                ConnectStatusLabel(profile: profile)
+                                ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
                             } else {
                                 Button {
                                     Task {
@@ -361,22 +362,28 @@ public struct UserHomeView: View {
 
     private func switchServer(to newServer: ServerNodeItem) {
         selectedServer = newServer
+        isProvisioning = true
         Task {
             if let activeSub = meResult?.subscriptions.first(where: { $0.isActive }) {
                 do {
                     try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl, preferredServerId: newServer.id)
+                    await MainActor.run { self.isProvisioning = false }
                     if environments.extensionProfile?.status == .connected {
                         try await environments.extensionProfile?.restart()
                     }
                 } catch {
                     print("Error switching server: \(error)")
+                    await MainActor.run { self.isProvisioning = false }
                 }
+            } else {
+                await MainActor.run { self.isProvisioning = false }
             }
         }
     }
 
     private func refreshData() {
         isLoading = true
+        isProvisioning = true
         Task {
             do {
                 let meRes = try await ApiClient.shared.me()
@@ -387,16 +394,23 @@ public struct UserHomeView: View {
                 if let activeSub = meRes.subscriptions.first(where: { $0.isActive }) {
                     do {
                         try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl)
-                        await MainActor.run { self.provisionError = nil }
+                        await MainActor.run {
+                            self.provisionError = nil
+                            self.isProvisioning = false
+                        }
                     } catch {
                         await MainActor.run {
                             self.provisionError = "Couldn't set up your VPN connection: \(error.localizedDescription)"
+                            self.isProvisioning = false
                         }
                     }
+                } else {
+                    await MainActor.run { self.isProvisioning = false }
                 }
             } catch {
                 await MainActor.run {
                     self.isLoading = false
+                    self.isProvisioning = false
                     self.errorMessage = error.localizedDescription
                 }
             }
