@@ -4087,8 +4087,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/devicekit/DeviceKit.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 5.8.0;
+				kind = exactVersion;
+				version = 5.7.0;
 			};
 		};
 		3ACE5E012EE1A91100644196 /* XCRemoteSwiftPackageReference "CodeEditSourceEditor" */ = {
