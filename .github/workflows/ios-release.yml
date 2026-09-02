@@ -73,26 +73,31 @@ jobs:
           # Output available destinations for verification
           xcodebuild -showdestinations -project sing-box.xcodeproj -scheme SFI || true
 
-      - name: Cache Libbox.xcframework
-        id: cache-libbox
-        uses: actions/cache@v4
-        with:
-          path: Libbox.xcframework
-          key: libbox-apple-${{ runner.os }}-v1.14
-
-      - name: Build Libbox.xcframework
-        if: steps.cache-libbox.outputs.cache-hit != 'true'
+      - name: Setup Libbox.xcframework
         run: |
-          echo "Building Libbox.xcframework from core..."
-          git clone --depth 1 https://github.com/sagernet/sing-box.git /tmp/sing-box-source
-          pushd /tmp/sing-box-source
-          go install github.com/sagernet/gomobile/cmd/gomobile@latest
-          go install github.com/sagernet/gomobile/cmd/gobind@latest
-          export PATH=$(go env GOPATH)/bin:$PATH
-          gomobile init
-          go run ./cmd/internal/build_libbox -target apple -platform ios
-          popd
-          cp -r /tmp/sing-box-source/Libbox.xcframework ./Libbox.xcframework
+          # 1. Prefer existing verified local Libbox.xcframework if available on runner host
+          if [ -d "/Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework" ]; then
+            echo "Copying verified local Libbox.xcframework..."
+            rm -rf ./Libbox.xcframework
+            cp -r /Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework ./Libbox.xcframework
+          fi
+
+          # 2. Build from pinned v1.9.7 release if not present
+          if [ ! -d "Libbox.xcframework" ] || [ ! -f "Libbox.xcframework/Info.plist" ]; then
+            echo "Building Libbox.xcframework from pinned v1.9.7 release tag..."
+            rm -rf /tmp/sing-box-source
+            git clone --depth 1 --branch v1.9.7 https://github.com/sagernet/sing-box.git /tmp/sing-box-source
+            pushd /tmp/sing-box-source
+            go install github.com/sagernet/gomobile/cmd/gomobile@latest
+            go install github.com/sagernet/gomobile/cmd/gobind@latest
+            export PATH=$(go env GOPATH)/bin:$PATH
+            gomobile init
+            go run ./cmd/internal/build_libbox -target apple -platform ios
+            popd
+            cp -r /tmp/sing-box-source/Libbox.xcframework ./Libbox.xcframework
+          fi
+          
+          echo "Libbox.xcframework setup complete."
 
       - name: Resolve Swift Package Dependencies
         run: |
