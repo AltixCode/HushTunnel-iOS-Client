@@ -502,7 +502,7 @@ public struct ResellerPersonalVpnTabView: View {
                                 .cornerRadius(6)
                         }
 
-                        Text("Plan: \(sub.planName) · Expires: \(sub.expiryDate.prefix(10))")
+                        Text("Plan: \(sub.planName) · Expires: \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
 
@@ -688,7 +688,7 @@ public struct ResellerCustomersTabView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(customer.email)
                             
-                        Text("Created: \(customer.createdAt.prefix(10))")
+                        Text("Created: \(DateUtils.formatDateWithShamsi(customer.createdAt))")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
@@ -743,7 +743,7 @@ public struct ResellerSubscriptionsTabView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(sub.customerEmail)
                             
-                        Text("\(sub.planName) · Expires \(sub.expiryDate.prefix(10))")
+                        Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -861,7 +861,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(order.customerEmail)
                                     
-                                Text("\(order.planName) · \(order.createdAt.prefix(10))")
+                                Text("\(order.planName) · \(DateUtils.formatDateWithShamsi(order.createdAt))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -964,7 +964,7 @@ public struct ResellerOrdersAndTransactionsTabView: View {
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text(String(tx.createdAt.prefix(16)).replacingOccurrences(of: "T", with: " "))
+                                Text(String(tx.createdAt.prefix(16)).replacingOccurrences(of: "T", with: " ") + (DateUtils.formatShamsiOnly(tx.createdAt).map { " (\($0))" } ?? ""))
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
@@ -1597,7 +1597,7 @@ public struct ResellerCustomerDetailSheetView: View {
                 Section(header: Text("Customer Information")) {
                     Text(customer.email).font(.headline)
                     Text("Account ID: \(customer.id)").font(.caption).foregroundColor(.secondary)
-                    Text("Created: \(customer.createdAt.prefix(10))").font(.caption).foregroundColor(.secondary)
+                    Text("Created: \(DateUtils.formatDateWithShamsi(customer.createdAt))").font(.caption).foregroundColor(.secondary)
                 }
 
                 Section(header: Text("Active Subscriptions")) {
@@ -1605,7 +1605,7 @@ public struct ResellerCustomerDetailSheetView: View {
                         ForEach(subs) { s in
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(s.planName)
-                                Text("Expires: \(s.expiryDate.prefix(10))").font(.caption).foregroundColor(.secondary)
+                                Text("Expires: \(DateUtils.formatDateWithShamsi(s.expiryDate))").font(.caption).foregroundColor(.secondary)
 
                                 HStack(spacing: 12) {
                                     Button {
@@ -1869,7 +1869,7 @@ public struct ResellerConnectionQrSheetView: View {
                     }
 
                     if let exp = details.expiryDate {
-                        Text("Expires: \(exp.prefix(10))")
+                        Text("Expires: \(DateUtils.formatDateWithShamsi(exp))")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -2165,7 +2165,7 @@ public struct ResellerSubResellerDetailSheetView: View {
                     HStack {
                         Text("Joined")
                         Spacer()
-                        Text(subReseller.createdAt.prefix(10))
+                        Text(DateUtils.formatDateWithShamsi(subReseller.createdAt))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
