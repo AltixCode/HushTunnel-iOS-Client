@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64]
 
     steps:
       - name: Checkout repository
@@ -43,26 +43,32 @@ jobs:
           go-version: '1.24'
           cache: false
 
-      - name: Select Xcode Version & Install iOS SDK
+      - name: Select Xcode Version & Set Developer Directory
         run: |
           echo "Listing installed Xcode versions..."
           ls -d /Applications/Xcode* || true
           
-          # Prioritize Xcode with full preinstalled iOS device SDKs (16.1, 16.0, 16.2, or default)
-          if [ -d "/Applications/Xcode_16.1.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode_16.1.app"
+          # Detect installed Xcode paths
+          if [ -d "/Applications/Xcode-beta.app" ]; then
+            DEV_DIR="/Applications/Xcode-beta.app/Contents/Developer"
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            DEV_DIR="/Applications/Xcode_16.1.app/Contents/Developer"
           elif [ -d "/Applications/Xcode_16.0.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode_16.0.app"
-          elif [ -d "/Applications/Xcode_16.2.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode_16.2.app"
+            DEV_DIR="/Applications/Xcode_16.0.app/Contents/Developer"
           elif [ -d "/Applications/Xcode.app" ]; then
-            sudo xcode-select -s "/Applications/Xcode.app"
+            DEV_DIR="/Applications/Xcode.app/Contents/Developer"
+          else
+            DEV_DIR="$(xcode-select -p 2>/dev/null || echo '/Applications/Xcode.app/Contents/Developer')"
           fi
+          
+          echo "Using Developer Directory: $DEV_DIR"
+          echo "DEVELOPER_DIR=$DEV_DIR" >> $GITHUB_ENV
+          export DEVELOPER_DIR="$DEV_DIR"
           
           xcodebuild -version
           
           # Ensure iOS platform runtime/device support is present
-          xcodebuild -downloadPlatform iOS || true
+          xcodebuild -downloadPlatform iOS 2>/dev/null || true
           
           # Output available destinations for verification
           xcodebuild -showdestinations -project sing-box.xcodeproj -scheme SFI || true
