@@ -1,5 +1,6 @@
 import FileProvider
 
+@available(iOS 16.0, *)
 class FileProviderEnumerator: NSObject, NSFileProviderEnumerator {
     private let directoryURL: URL?
     private let workingDirectory: URL

@@ -1,6 +1,7 @@
 import FileProvider
 import UniformTypeIdentifiers
 
+@available(iOS 16.0, *)
 class FileProviderExtension: NSObject, NSFileProviderReplicatedExtension {
     let domain: NSFileProviderDomain
 

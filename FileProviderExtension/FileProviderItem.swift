@@ -1,6 +1,7 @@
 import FileProvider
 import UniformTypeIdentifiers
 
+@available(iOS 16.0, *)
 class FileProviderItem: NSObject, NSFileProviderItem {
     private let url: URL
     private let fileAttributes: [FileAttributeKey: Any]
