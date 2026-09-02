@@ -2,6 +2,7 @@ import AppIntents
 import Foundation
 import Library
 
+@available(iOS 16.0, macOS 13.0, *)
 struct StartServiceIntent: AppIntent {
     static var title: LocalizedStringResource = "Start sing-box"
 
@@ -45,6 +46,7 @@ struct StartServiceIntent: AppIntent {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct RestartServiceIntent: AppIntent {
     static var title: LocalizedStringResource = "Restart sing-box"
 
@@ -70,6 +72,7 @@ struct RestartServiceIntent: AppIntent {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct StopServiceIntent: AppIntent {
     static var title: LocalizedStringResource = "Stop sing-box"
 
@@ -89,6 +92,7 @@ struct StopServiceIntent: AppIntent {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct ToggleServiceIntent: AppIntent {
     static var title: LocalizedStringResource = "Toggle sing-box"
 
@@ -114,6 +118,7 @@ struct ToggleServiceIntent: AppIntent {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct GetServiceStatus: AppIntent {
     static var title: LocalizedStringResource = "Get is sing-box service started"
 
@@ -132,6 +137,7 @@ struct GetServiceStatus: AppIntent {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct GetCurrentProfile: AppIntent {
     static var title: LocalizedStringResource = "Get current sing-box profile"
 
@@ -150,6 +156,7 @@ struct GetCurrentProfile: AppIntent {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct UpdateProfileIntent: AppIntent {
     static var title: LocalizedStringResource = "Update sing-box profile"
 
@@ -192,6 +199,7 @@ class RemoteProfileProvider: DynamicOptionsProvider {
     }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 struct ServiceShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
