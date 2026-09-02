@@ -357,11 +357,11 @@ public struct UserHomeView: View {
             .sheet(isPresented: $showDebugLogs) {
                 NavigationStack {
                     LogView()
-                        .navigationTitle("Debug Logs")
+                        .navigationTitle(lang.tr("debug.logsTitle"))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") { showDebugLogs = false }
+                                Button(lang.tr("common.done")) { showDebugLogs = false }
                             }
                         }
                 }

@@ -114,11 +114,11 @@ public struct ResellerHomeView: View {
                 // Tab 3: Subscriptions
                 ResellerSubscriptionsTabView(
                     subscriptions: subscriptions,
-                    onExtend: { subId in extendSub(id: subId) },
-                    onToggle: { subId, enable in toggleSub(id: subId, enable: enable) },
-                    onResetUuid: { subId in resetUuid(id: subId) },
-                    onResetTraffic: { subId in resetTraffic(id: subId) },
-                    onRevoke: { subId in revokeSub(id: subId) },
+                    onExtend: { subId in try await extendSub(id: subId) },
+                    onToggle: { subId, enable in try await toggleSub(id: subId, enable: enable) },
+                    onResetUuid: { subId in try await resetUuid(id: subId) },
+                    onResetTraffic: { subId in try await resetTraffic(id: subId) },
+                    onRevoke: { subId in try await revokeSub(id: subId) },
                     onSelectSub: { sub in
                         activeConnectionDetails = ResellerConnectionDetails(
                             title: sub.customerEmail,
@@ -240,11 +240,11 @@ public struct ResellerHomeView: View {
             .sheet(isPresented: $showDebugLogs) {
                 NavigationStack {
                     LogView()
-                        .navigationTitle("Debug Logs")
+                        .navigationTitle(lang.tr("debug.logsTitle"))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") { showDebugLogs = false }
+                                Button(lang.tr("common.done")) { showDebugLogs = false }
                             }
                         }
                 }
@@ -450,39 +450,29 @@ public struct ResellerHomeView: View {
         )
     }
 
-    private func extendSub(id: String) {
-        Task {
-            try? await ApiClient.shared.extendResellerSubscription(id: id, days: 30)
-            refreshAll()
-        }
+    private func extendSub(id: String) async throws {
+        try await ApiClient.shared.extendResellerSubscription(id: id, days: 30)
+        refreshAll()
     }
 
-    private func toggleSub(id: String, enable: Bool) {
-        Task {
-            try? await ApiClient.shared.toggleResellerSubscription(id: id, enable: enable)
-            refreshAll()
-        }
+    private func toggleSub(id: String, enable: Bool) async throws {
+        try await ApiClient.shared.toggleResellerSubscription(id: id, enable: enable)
+        refreshAll()
     }
 
-    private func resetUuid(id: String) {
-        Task {
-            try? await ApiClient.shared.resetResellerSubscriptionUuid(id: id)
-            refreshAll()
-        }
+    private func resetUuid(id: String) async throws {
+        try await ApiClient.shared.resetResellerSubscriptionUuid(id: id)
+        refreshAll()
     }
 
-    private func resetTraffic(id: String) {
-        Task {
-            try? await ApiClient.shared.resetResellerSubscriptionTraffic(id: id)
-            refreshAll()
-        }
+    private func resetTraffic(id: String) async throws {
+        try await ApiClient.shared.resetResellerSubscriptionTraffic(id: id)
+        refreshAll()
     }
 
-    private func revokeSub(id: String) {
-        Task {
-            try? await ApiClient.shared.revokeResellerSubscription(id: id)
-            refreshAll()
-        }
+    private func revokeSub(id: String) async throws {
+        try await ApiClient.shared.revokeResellerSubscription(id: id)
+        refreshAll()
     }
 }
 
@@ -807,14 +797,24 @@ public struct ResellerCustomersTabView: View {
 
 public struct ResellerSubscriptionsTabView: View {
     let subscriptions: [ResellerSubscription]
-    let onExtend: (String) -> Void
-    let onToggle: (String, Bool) -> Void
-    let onResetUuid: (String) -> Void
-    let onResetTraffic: (String) -> Void
-    let onRevoke: (String) -> Void
+    let onExtend: (String) async throws -> Void
+    let onToggle: (String, Bool) async throws -> Void
+    let onResetUuid: (String) async throws -> Void
+    let onResetTraffic: (String) async throws -> Void
+    let onRevoke: (String) async throws -> Void
     var onSelectSub: ((ResellerSubscription) -> Void)? = nil
     @State private var search = ""
     @ObservedObject var lang = LanguageManager.shared
+
+    // Tracks which (subscriptionId, action) is currently in flight so only the
+    // tapped button shows a spinner, not every button on every row.
+    @State private var pendingAction: (String, String)?
+    // Disabling a subscription cuts a real customer's access, resetting the
+    // UUID breaks their existing VLESS link/QR immediately, and revoking
+    // deletes the subscription outright — all three need explicit confirmation
+    // before firing.
+    @State private var confirmTarget: (id: String, email: String, kind: String)?
+    @State private var errorMessage: String?
 
     private var filtered: [ResellerSubscription] {
         if search.isEmpty { return subscriptions }
@@ -825,9 +825,38 @@ public struct ResellerSubscriptionsTabView: View {
         }
     }
 
+    private func run(_ id: String, _ kind: String, _ action: @escaping () async throws -> Void) {
+        pendingAction = (id, kind)
+        errorMessage = nil
+        Task {
+            do {
+                try await action()
+            } catch {
+                await MainActor.run { errorMessage = error.localizedDescription }
+            }
+            await MainActor.run { pendingAction = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func actionLabel(_ id: String, _ kind: String, _ text: String) -> some View {
+        if pendingAction?.0 == id && pendingAction?.1 == kind {
+            ProgressView().scaleEffect(0.7)
+        } else {
+            Text(text)
+        }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
-            TextField("Search subscriptions...", text: $search)
+            if let err = errorMessage {
+                Text(err)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.horizontal, 16)
+            }
+
+            TextField(lang.tr("reseller.searchSubscriptions"), text: $search)
                 .padding(10)
                 .background(Color(uiColor: .secondarySystemGroupedBackground))
                 .cornerRadius(10)
@@ -841,15 +870,15 @@ public struct ResellerSubscriptionsTabView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(sub.customerEmail)
-                            
+
                         Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     Spacer()
-                    Text(sub.isActive ? "Active" : "Disabled")
+                    Text(sub.isActive ? lang.tr("reseller.subStatusActive") : lang.tr("reseller.subStatusDisabled"))
                         .font(.caption2)
-                        
+
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
@@ -863,37 +892,100 @@ public struct ResellerSubscriptionsTabView: View {
 
                 // Action Row
                 HStack(spacing: 8) {
-                    Button("+30 Days") { onExtend(sub.id) }
+                    Button {
+                        run(sub.id, "extend") { try await onExtend(sub.id) }
+                    } label: {
+                        actionLabel(sub.id, "extend", lang.tr("reseller.extend"))
+                    }
                         .font(.caption2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color(uiColor: .secondarySystemGroupedBackground))
                         .cornerRadius(6)
+                        .disabled(pendingAction != nil)
 
-                    Button(sub.isActive ? "Disable" : "Enable") { onToggle(sub.id, !sub.isActive) }
+                    Button {
+                        if sub.isActive {
+                            confirmTarget = (sub.id, sub.customerEmail, "disable")
+                        } else {
+                            run(sub.id, "toggle") { try await onToggle(sub.id, true) }
+                        }
+                    } label: {
+                        actionLabel(sub.id, "toggle", sub.isActive ? lang.tr("reseller.toggleDisable") : lang.tr("reseller.toggleEnable"))
+                    }
                         .font(.caption2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color(uiColor: .secondarySystemGroupedBackground))
                         .cornerRadius(6)
+                        .disabled(pendingAction != nil)
 
-                    Button("Reset UUID") { onResetUuid(sub.id) }
+                    Button {
+                        confirmTarget = (sub.id, sub.customerEmail, "resetUuid")
+                    } label: {
+                        actionLabel(sub.id, "resetUuid", lang.tr("reseller.resetUuid"))
+                    }
                         .font(.caption2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color(uiColor: .secondarySystemGroupedBackground))
                         .cornerRadius(6)
+                        .disabled(pendingAction != nil)
 
                     Spacer()
 
-                    Button("Revoke") { onRevoke(sub.id) }
+                    Button {
+                        confirmTarget = (sub.id, sub.customerEmail, "revoke")
+                    } label: {
+                        actionLabel(sub.id, "revoke", lang.tr("reseller.revoke"))
+                    }
                         .font(.caption2)
                         .foregroundColor(.red)
+                        .disabled(pendingAction != nil)
                 }
             }
             .padding(.vertical, 6)
         }
         .id("subscriptions-\(lang.currentLanguage.rawValue)")
+        }
+        .alert(
+            confirmTargetTitle,
+            isPresented: Binding(get: { confirmTarget != nil }, set: { if !$0 { confirmTarget = nil } }),
+            presenting: confirmTarget
+        ) { target in
+            Button(lang.tr("common.cancel"), role: .cancel) {}
+            Button(lang.tr("common.confirm"), role: .destructive) {
+                switch target.kind {
+                case "disable":
+                    run(target.id, "toggle") { try await onToggle(target.id, false) }
+                case "resetUuid":
+                    run(target.id, "resetUuid") { try await onResetUuid(target.id) }
+                case "revoke":
+                    run(target.id, "revoke") { try await onRevoke(target.id) }
+                default:
+                    break
+                }
+            }
+        } message: { target in
+            Text(String(format: confirmTargetMessageFormat, target.email))
+        }
+    }
+
+    private var confirmTargetTitle: String {
+        switch confirmTarget?.kind {
+        case "disable": return lang.tr("reseller.confirmDisableSubTitle")
+        case "resetUuid": return lang.tr("reseller.confirmResetUuidTitle")
+        case "revoke": return lang.tr("reseller.confirmRevokeTitle")
+        default: return ""
+        }
+    }
+
+    private var confirmTargetMessageFormat: String {
+        switch confirmTarget?.kind {
+        case "disable": return lang.tr("reseller.confirmDisableSubMessage")
+        case "resetUuid": return lang.tr("reseller.confirmResetUuidMessage")
+        case "revoke": return lang.tr("reseller.confirmRevokeMessage")
+        default: return "%@"
         }
     }
 }
