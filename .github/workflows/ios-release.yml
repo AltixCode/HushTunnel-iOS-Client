@@ -155,19 +155,34 @@ jobs:
             export P12_RAW="$P12_BASE64"
             python3 -c "import base64, os; open('$CERT_PATH', 'wb').write(base64.b64decode(os.environ['P12_RAW'].strip()))"
 
-            echo "Importing certificate into keychain..."
+            echo "Importing certificate into build keychain and login keychain..."
             if [ -n "$P12_PASS" ]; then
               security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A || \
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "" -T /usr/bin/codesign -T /usr/bin/security -A || \
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security -A || true
+              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "" -T /usr/bin/codesign -T /usr/bin/security -A || true
             else
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "" -T /usr/bin/codesign -T /usr/bin/security -A || \
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security -A || true
+              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "" -T /usr/bin/codesign -T /usr/bin/security -A || true
             fi
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
             security default-keychain -s "$KEYCHAIN_PATH" || true
+
+            # Also import into login keychain for xcodebuild exportArchive discovery
+            LOGIN_KEYCHAIN=~/Library/Keychains/login.keychain-db
+            if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+              LOGIN_KEYCHAIN=~/Library/Keychains/login.keychain
+            fi
+            if [ -f "$LOGIN_KEYCHAIN" ]; then
+              security unlock-keychain -p "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+              if [ -n "$P12_PASS" ]; then
+                security import "$CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "$P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || \
+                security import "$CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
+              else
+                security import "$CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
+              fi
+              security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            fi
+
             echo "Keychain identities after import:"
-            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+            security find-identity -v -p codesigning || true
 
             # Append to user keychain search list
             EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
@@ -229,7 +244,7 @@ jobs:
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>app-store</string>
+              <string>app-store-connect</string>
               <key>teamID</key>
               <string>NG7T47F736</string>
               <key>signingStyle</key>
