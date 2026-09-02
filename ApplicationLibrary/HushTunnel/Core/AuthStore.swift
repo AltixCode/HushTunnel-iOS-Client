@@ -20,6 +20,13 @@ public final class AuthStore: ObservableObject {
     }
 
     public func loadSession() {
+        if CommandLine.arguments.contains("--mock-session") {
+            self.token = "mock-token"
+            self.email = "demo@hushtunnel.com"
+            self.role = "USER"
+            self.isAuthenticated = true
+            return
+        }
         let defaults = UserDefaults.standard
         let savedToken = defaults.string(forKey: tokenKey)
         let savedEmail = defaults.string(forKey: emailKey)

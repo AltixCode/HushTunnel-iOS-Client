@@ -6,7 +6,45 @@ public struct UserHomeView: View {
     @ObservedObject var lang = LanguageManager.shared
     @EnvironmentObject private var environments: ExtensionEnvironments
 
-    @State private var meResult: MeResult?
+    @State private var meResult: MeResult? = MeResult(
+        email: "demo@hushtunnel.com",
+        role: "USER",
+        subscriptions: [
+            SubscriptionInfo(
+                id: "sub-101",
+                planName: "Pro Freedom Plan (30 Days)",
+                expiryDate: "2026-10-01T00:00:00Z",
+                isActive: true,
+                usedBytes: 38_500_000_000,
+                totalBytes: 100_000_000_000,
+                subscriptionUrl: "vless://auto-config@5.255.125.216:443"
+            )
+        ],
+        servers: [
+            ServerNodeItem(
+                id: "netherlands-primary",
+                name: "Netherlands 01 (Amsterdam)",
+                countryCode: "NL",
+                flag: "🇳🇱",
+                city: "Amsterdam",
+                host: "5.255.125.216",
+                port: 443,
+                protocolName: "vless",
+                isDefault: true
+            ),
+            ServerNodeItem(
+                id: "germany-frankfurt",
+                name: "Germany 01 (Frankfurt)",
+                countryCode: "DE",
+                flag: "🇩🇪",
+                city: "Frankfurt",
+                host: "142.132.170.81",
+                port: 443,
+                protocolName: "vless",
+                isDefault: false
+            )
+        ]
+    )
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var provisionError: String?
