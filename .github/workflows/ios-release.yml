@@ -76,15 +76,18 @@ jobs:
       - name: Setup Libbox.xcframework
         run: |
           # 1. Prefer existing verified local Libbox.xcframework if available on runner host
-          if [ -d "/Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework" ]; then
-            echo "Copying verified local Libbox.xcframework..."
-            rm -rf ./Libbox.xcframework
-            cp -r /Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework ./Libbox.xcframework
-          fi
+          for LOCAL_PATH in "/Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework" "$HOME/Dev/vpn-ios-client/Libbox.xcframework"; do
+            if [ -d "$LOCAL_PATH" ] && [ -f "$LOCAL_PATH/Info.plist" ]; then
+              echo "Found verified local Libbox.xcframework at $LOCAL_PATH - copying..."
+              rm -rf ./Libbox.xcframework
+              cp -r "$LOCAL_PATH" ./Libbox.xcframework
+              break
+            fi
+          done
 
           # 2. Build from pinned v1.9.7 release if not present
           if [ ! -d "Libbox.xcframework" ] || [ ! -f "Libbox.xcframework/Info.plist" ]; then
-            echo "Building Libbox.xcframework from pinned v1.9.7 release tag..."
+            echo "Building Libbox.xcframework from pinned v1.9.7 release tag with -target ios..."
             rm -rf /tmp/sing-box-source
             git clone --depth 1 --branch v1.9.7 https://github.com/sagernet/sing-box.git /tmp/sing-box-source
             pushd /tmp/sing-box-source
@@ -92,7 +95,7 @@ jobs:
             go install github.com/sagernet/gomobile/cmd/gobind@latest
             export PATH=$(go env GOPATH)/bin:$PATH
             gomobile init
-            go run ./cmd/internal/build_libbox -target apple -platform ios
+            go run ./cmd/internal/build_libbox -target ios
             popd
             cp -r /tmp/sing-box-source/Libbox.xcframework ./Libbox.xcframework
           fi
