@@ -114,32 +114,48 @@ jobs:
           echo "APP_MARKETING_VERSION=1.0.$COMMIT_COUNT" >> $GITHUB_ENV
           echo "APP_BUILD_NUMBER=$COMMIT_COUNT" >> $GITHUB_ENV
 
-      - name: Setup Keychain & Certificates (if provided)
+      - name: Setup Signing & App Store API Key
         id: keychain_setup
         run: |
+          # 1. Setup App Store Connect API Key if provided
+          if [ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}" ] && [ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" ]; then
+            echo "Configuring App Store Connect API Key in ~/.appstoreconnect/private_keys..."
+            mkdir -p ~/.appstoreconnect/private_keys
+            echo "${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+            chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+            echo "API_KEY_CONFIGURED=true" >> $GITHUB_ENV
+          else
+            echo "API_KEY_CONFIGURED=false" >> $GITHUB_ENV
+          fi
+
+          # 2. Setup Distribution Certificate if secret provided
           if [ -n "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" ] && [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ]; then
-            echo "Configuring Apple Distribution Certificate..."
+            echo "Configuring Apple Distribution Certificate from secret..."
             KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
             KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
 
-            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH" || true
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
 
             CERT_PATH=$RUNNER_TEMP/certificate.p12
             echo "${{ secrets.APPLE_CERTIFICATE_BASE64 }}" | base64 -d > "$CERT_PATH"
-            security import "$CERT_PATH" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security import "$CERT_PATH" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" || true
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
 
-            # Provisioning Profile
             if [ -n "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" ]; then
               mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
               echo "${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
             fi
-            
+            echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
+          elif [ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}" ]; then
+            echo "App Store Connect API Key will be used for automatic signing & distribution."
+            echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
+          elif security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
+            echo "Found local host Apple Distribution certificate in Keychain."
             echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
           else
-            echo "No Apple Certificate secret provided. Proceeding with Simulator/Unsigned build."
+            echo "No Distribution Certificate or API Key secret detected. Building unsigned package."
             echo "SIGNING_CONFIGURED=false" >> $GITHUB_ENV
           fi
 
@@ -204,21 +220,14 @@ jobs:
           fi
 
       - name: Upload to App Store Connect / TestFlight
-        if: env.SIGNING_CONFIGURED == 'true' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
+        if: env.API_KEY_CONFIGURED == 'true' && (github.ref == 'refs/heads/main' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
         run: |
-          if [ -n "${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}" ]; then
-            echo "Uploading IPA to App Store Connect / TestFlight via altool..."
-            mkdir -p ~/.appstoreconnect/private_keys
-            echo "${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
-            
-            xcrun altool --upload-app \
-              -f build/output/HushTunnel.ipa \
-              -t ios \
-              --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
-              --apiIssuer "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
-          else
-            echo "Skipping App Store upload: APP_STORE_CONNECT_API_KEY_CONTENT secret not configured."
-          fi
+          echo "Uploading IPA to App Store Connect / TestFlight via altool..."
+          xcrun altool --upload-app \
+            -f build/output/HushTunnel.ipa \
+            -t ios \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
