@@ -398,20 +398,44 @@ jobs:
           sed -i '' "s/\${VERSION}/$VERSION/g" RELEASE_NOTES.md
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') && github.ref != 'refs/heads/dev'
-        with:
-          tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
-          name: ${{ inputs.release_title || steps.tag_info.outputs.TAG_NAME }}
-          body_path: RELEASE_NOTES.md
-          draft: false
-          prerelease: false
-          files: |
-            build/output/*.ipa
-            build/output/HushTunnel.ipa
-            build/output/SHA256SUMS.txt
+        if: success()
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag_info.outputs.TAG_NAME }}
+          TITLE: ${{ inputs.release_title || steps.tag_info.outputs.TAG_NAME }}
+        run: |
+          command -v gh >/dev/null 2>&1 || brew install gh
+
+          # Re-running the same commit (manual re-run, or re-pushing to dev
+          # without a new commit) recomputes the SAME tag every time. The
+          # previous softprops/action-gh-release step would then hit a
+          # "ReleaseAsset already_exists" error re-uploading identically
+          # named assets (HushTunnel.ipa, SHA256SUMS.txt) to an already
+          # -published release, and the release silently never got the new
+          # build. Make this idempotent instead: create the release if it's
+          # missing, then always (re)upload with --clobber so a re-run
+          # unconditionally lands the fresh IPA, regardless of prior state.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - updating notes and assets."
+            gh release edit "$TAG" \
+              --title "$TITLE" \
+              --notes-file RELEASE_NOTES.md \
+              --draft=false \
+              --prerelease=false \
+              --latest
+          else
+            echo "Creating release $TAG."
+            gh release create "$TAG" \
+              --title "$TITLE" \
+              --notes-file RELEASE_NOTES.md \
+              --target "${{ github.sha }}" \
+              --latest
+          fi
+
+          gh release upload "$TAG" \
+            build/output/*.ipa \
+            build/output/SHA256SUMS.txt \
+            --clobber
 
       - name: Clean signing credentials
         if: always()
