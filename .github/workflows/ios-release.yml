@@ -155,18 +155,38 @@ jobs:
           # 3. Setup temporary dedicated keychain for this build job
           KEYCHAIN_PATH="$RUNNER_TEMP/build-signing.keychain-db"
           KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
-          WWDR_PATH="$RUNNER_TEMP/AppleWWDRCAG3.cer"
 
           security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Trust chain: Apple Worldwide Developer Relations intermediate CA
-          curl --fail --silent --show-error --location \
+          # Trust chain: Apple has issued five generations of the Worldwide
+          # Developer Relations intermediate CA (G2-G6), and a freshly issued
+          # Development/Distribution certificate can chain through any of
+          # them depending on when Apple minted it - importing only G3 (the
+          # old default here) left newer certs unable to build a chain to
+          # the root ("unable to build chain to self-signed root" /
+          # errSecInternalComponent during codesign). Import every
+          # generation, plus the root CAs, so whichever one a given
+          # certificate actually needs is present.
+          for CERT_URL in \
+            https://www.apple.com/appleca/AppleIncRootCertificate.cer \
+            https://www.apple.com/certificateauthority/AppleRootCA-G2.cer \
+            https://www.apple.com/certificateauthority/AppleRootCA-G3.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG2.cer \
             https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
-            --output "$WWDR_PATH"
-          security import "$WWDR_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+            https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG5.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer \
+          ; do
+            CERT_FILE="$RUNNER_TEMP/$(basename "$CERT_URL")"
+            if curl --fail --silent --show-error --location "$CERT_URL" --output "$CERT_FILE"; then
+              security import "$CERT_FILE" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign 2>/dev/null || true
+            else
+              echo "::warning::Could not download $CERT_URL - skipping"
+            fi
+          done
 
           # Import Apple Development certificate (for xcodebuild archive with automatic signing)
           if [ -n "$DEV_P12_BASE64" ]; then
@@ -455,5 +475,5 @@ jobs:
           if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
             security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
           fi
-          rm -f "$RUNNER_TEMP/dev_cert.p12" "$RUNNER_TEMP/dist_cert.p12" "$RUNNER_TEMP/dist_cert.pem" "$RUNNER_TEMP/AppleWWDRCAG3.cer"
+          rm -f "$RUNNER_TEMP/dev_cert.p12" "$RUNNER_TEMP/dist_cert.p12" "$RUNNER_TEMP/dist_cert.pem" "$RUNNER_TEMP"/Apple*.cer
           rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
