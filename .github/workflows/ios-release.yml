@@ -120,15 +120,16 @@ jobs:
           API_KEY_DATA: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 || secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           API_KEY_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}
-          P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 || secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 || secrets.APPLE_CERTIFICATE_BASE64 }}
-          P12_PASS: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD || secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
+          DEV_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_P12_BASE64 || secrets.APPLE_DEVELOPER_P12_BASE64 }}
+          DEV_P12_PASS: ${{ secrets.APPLE_DEVELOPMENT_P12_PASSWORD || secrets.APPLE_DEVELOPER_P12_PASSWORD }}
+          DIST_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 || secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 || secrets.APPLE_CERTIFICATE_BASE64 }}
+          DIST_P12_PASS: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD || secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          
+
           # 1. Setup App Store Connect API Key (.p8)
           if [ -n "$API_KEY_DATA" ] && [ -n "$API_KEY_ID" ]; then
             echo "Setting up App Store Connect API Key: AuthKey_$API_KEY_ID.p8..."
-            # Check if base64 or raw string
             if printf '%s' "$API_KEY_DATA" | grep -q "BEGIN PRIVATE KEY"; then
               printf '%s\n' "$API_KEY_DATA" > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
             else
@@ -140,259 +141,100 @@ jobs:
             echo "API_KEY_CONFIGURED=false" >> $GITHUB_ENV
           fi
 
-          # 2. Setup Distribution Certificate (.p12) in dedicated keychain
-          if [ -n "$P12_BASE64" ]; then
-            echo "Creating temporary keychain for Apple Distribution Certificate..."
-            KEYCHAIN_PATH=$RUNNER_TEMP/build-signing.keychain-db
-            KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
-            CERT_PATH=$RUNNER_TEMP/dist_cert.p12
-            CERT_PEM_PATH=$RUNNER_TEMP/dist_cert.pem
-            WWDR_PATH=$RUNNER_TEMP/AppleWWDRCAG3.cer
+          # 2. Heal / normalize runner host default keychain (cures "Keychain Not Found" error on Mac mini)
+          LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+            LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain"
+          fi
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            echo "Ensuring host default keychain is login keychain: $LOGIN_KEYCHAIN"
+            security default-keychain -s "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            security unlock-keychain -p "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+          fi
 
-            # Cancelled self-hosted jobs may leave this task-scoped keychain behind.
-            security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
-            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # 3. Setup temporary dedicated keychain for this build job
+          KEYCHAIN_PATH="$RUNNER_TEMP/build-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
+          WWDR_PATH="$RUNNER_TEMP/AppleWWDRCAG3.cer"
 
-            export P12_RAW="$P12_BASE64"
-            python3 -c "import base64, os; raw=''.join(os.environ['P12_RAW'].split()); open('$CERT_PATH', 'wb').write(base64.b64decode(raw, validate=True))"
-            chmod 600 "$CERT_PATH"
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-            # Let macOS import the P12 directly. Its Keychain importer supports
-            # older PKCS#12 encryption variants that the runner's OpenSSL may not.
-            echo "Importing certificate and private key into the temporary build keychain..."
-            if ! security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASS" -T /usr/bin/codesign -T /usr/bin/security; then
-              echo "::error::Keychain could not import APPLE_DISTRIBUTION_P12_BASE64. Check that it is a base64-encoded .p12 and APPLE_DISTRIBUTION_P12_PASSWORD matches its export password."
-              exit 1
+          # Trust chain: Apple Worldwide Developer Relations intermediate CA
+          curl --fail --silent --show-error --location \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
+            --output "$WWDR_PATH"
+          security import "$WWDR_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+
+          # Import Apple Development certificate (for xcodebuild archive with automatic signing)
+          if [ -n "$DEV_P12_BASE64" ]; then
+            echo "Importing Apple Development Certificate (.p12)..."
+            DEV_CERT_PATH="$RUNNER_TEMP/dev_cert.p12"
+            export DEV_RAW="$DEV_P12_BASE64"
+            python3 -c "import base64, os; raw=''.join(os.environ['DEV_RAW'].split()); open('$DEV_CERT_PATH', 'wb').write(base64.b64decode(raw, validate=True))"
+            chmod 600 "$DEV_CERT_PATH"
+            security import "$DEV_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$DEV_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security
+            if [ -f "$LOGIN_KEYCHAIN" ]; then
+              security import "$DEV_CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "$DEV_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
             fi
+          fi
 
-            # Apple Distribution identities chain through WWDR G3. Xcode normally
-            # installs it, but a headless/self-hosted runner can lack the current
-            # intermediate and then report zero valid identities after a good import.
-            curl --fail --silent --show-error --location \
-              https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
-              --output "$WWDR_PATH"
-            security import "$WWDR_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-            # Record the runner's current default keychain and search list so
-            # the cleanup step can put them back. Without this, setting our
-            # temp keychain as default and later deleting it (end of job)
-            # leaves the user session with NO default keychain at all -
-            # macOS then can't find anywhere to store items and starts
-            # popping "Keychain Not Found" dialogs on the console session,
-            # on every run, forever. Fall back to the standard login keychain
-            # path if none is set yet (e.g. after a keychain reset).
-            ORIGINAL_DEFAULT_KEYCHAIN=$(security default-keychain -d user 2>/dev/null | tr -d '[:space:]"')
-            if [ -z "$ORIGINAL_DEFAULT_KEYCHAIN" ]; then
-              ORIGINAL_DEFAULT_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          # Import Apple Distribution certificate (for xcodebuild exportArchive to App Store)
+          if [ -n "$DIST_P12_BASE64" ]; then
+            echo "Importing Apple Distribution Certificate (.p12)..."
+            DIST_CERT_PATH="$RUNNER_TEMP/dist_cert.p12"
+            export DIST_RAW="$DIST_P12_BASE64"
+            python3 -c "import base64, os; raw=''.join(os.environ['DIST_RAW'].split()); open('$DIST_CERT_PATH', 'wb').write(base64.b64decode(raw, validate=True))"
+            chmod 600 "$DIST_CERT_PATH"
+            security import "$DIST_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$DIST_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security
+            if [ -f "$LOGIN_KEYCHAIN" ]; then
+              security import "$DIST_CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "$DIST_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
             fi
-            echo "ORIGINAL_DEFAULT_KEYCHAIN=$ORIGINAL_DEFAULT_KEYCHAIN" >> $GITHUB_ENV
+          fi
 
-            security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+          fi
 
-            # Keep the runner's other keychains in the search list because macOS
-            # uses them for Apple's intermediate/root trust chain.
-            EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
-            echo "ORIGINAL_KEYCHAIN_SEARCH_LIST=$EXISTING_KEYCHAINS" >> $GITHUB_ENV
-            security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
-
-            echo "Codesigning identities after import:"
-            security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-            if ! security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -q 'Apple Distribution'; then
-              echo "::error::The imported .p12 is not a valid Apple Distribution codesigning identity. It may be revoked, untrusted, for another team, or missing its private key."
-              exit 1
-            fi
-            security find-certificate -c 'Apple Distribution' -p "$KEYCHAIN_PATH" > "$CERT_PEM_PATH"
-            echo "Validated Apple Distribution certificate:"
-            openssl x509 -in "$CERT_PEM_PATH" -noout -subject -issuer -dates
-            
-            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
-            echo "KEYCHAIN_CREATED=true" >> $GITHUB_ENV
-            echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
-          elif security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
-            echo "Found Apple Distribution certificate in runner host Keychain."
-            echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
+          # Set user keychain search list: build keychain first, login keychain second
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security list-keychains -d user -s "$KEYCHAIN_PATH" "$LOGIN_KEYCHAIN"
           else
-            echo "No Distribution Certificate secret detected."
-            echo "SIGNING_CONFIGURED=false" >> $GITHUB_ENV
+            security list-keychains -d user -s "$KEYCHAIN_PATH"
           fi
 
-      - name: Fetch Distribution Provisioning Profiles
-        id: fetch_profiles
-        env:
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          API_KEY_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}
-        run: |
-          # Automatic signing (-allowProvisioningUpdates) needs Xcode to bootstrap
-          # the account's FULL signing state, including an "iOS Development"
-          # certificate+private key - not just the Distribution identity this
-          # runner actually has. That bootstrap normally happens once via an
-          # Xcode GUI Apple ID sign-in and gets cached in the keychain; the
-          # keychain reset wiped that cache, and an App Store Connect API key
-          # alone cannot recreate it headlessly (its "Revoke certificate..."
-          # error asks for an interactive decision). Automatic signing is
-          # fundamentally the wrong tool for a single-purpose archive-only CI
-          # runner. Fix: switch to Manual signing - fetch the already-existing
-          # App Store distribution profiles via the App Store Connect API
-          # (read-only, no certificate creation involved) and pin each target
-          # to its profile UUID directly.
-          AUTH_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8"
-          if [ "$API_KEY_CONFIGURED" != "true" ] || [ ! -f "$AUTH_KEY_PATH" ]; then
-            echo "::error::App Store Connect API key is required to fetch distribution provisioning profiles for manual signing."
-            exit 1
-          fi
+          echo "Codesigning identities in build keychain:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-          # Homebrew's system Python refuses global pip installs (PEP 668). Use a
-          # throwaway venv instead of --break-system-packages against a shared,
-          # persistent runner interpreter.
-          VENV_PATH="$RUNNER_TEMP/asc-api-venv"
-          python3 -m venv "$VENV_PATH"
-          "$VENV_PATH/bin/pip" install --quiet pyjwt cryptography
-
-          mkdir -p build
-          "$VENV_PATH/bin/python3" - "$AUTH_KEY_PATH" "$API_KEY_ID" "$API_KEY_ISSUER" << 'PYEOF'
-          import base64, json, os, plistlib, sys, time, urllib.error, urllib.request
-          import jwt
-
-          auth_key_path, key_id, issuer_id = sys.argv[1], sys.argv[2], sys.argv[3]
-          team_id = "8Q8Y559285"
-
-          # target name -> bundle identifier, from sing-box.xcodeproj/project.pbxproj
-          TARGET_BUNDLE_IDS = {
-              "SFI": "com.hushtunnel.ios",
-              "Extension": "com.hushtunnel.ios.extension",
-              "IntentsExtension": "com.hushtunnel.ios.intents",
-              "FileProviderExtension": "com.hushtunnel.ios.fileprovider",
-              "WidgetExtension": "com.hushtunnel.ios.widget",
-              "ShareExtension": "com.hushtunnel.ios.share",
-              "ActionExtension": "com.hushtunnel.ios.action",
-          }
-
-          with open(auth_key_path) as f:
-              private_key = f.read()
-
-          token = jwt.encode(
-              {
-                  "iss": issuer_id,
-                  "iat": int(time.time()),
-                  "exp": int(time.time()) + 1200,
-                  "aud": "appstoreconnect-v1",
-              },
-              private_key,
-              algorithm="ES256",
-              headers={"kid": key_id, "typ": "JWT"},
-          )
-
-          def api_get(url):
-              req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-              try:
-                  with urllib.request.urlopen(req, timeout=30) as resp:
-                      return json.loads(resp.read())
-              except urllib.error.HTTPError as e:
-                  body = e.read().decode(errors="replace")
-                  print(f"::error::App Store Connect API request failed ({e.code} {e.reason}): {url}\n{body}", file=sys.stderr)
-                  raise
-
-          # Fetch every profile (no server-side type/state filter) so a filter
-          # mismatch or a permissions gap shows up as visible data instead of a
-          # silent empty result.
-          all_profiles = []
-          bundle_id_names = {}
-          url = "https://api.appstoreconnect.apple.com/v1/profiles?include=bundleId&limit=200"
-          while url:
-              page = api_get(url)
-              for item in page.get("included", []):
-                  if item["type"] == "bundleIds":
-                      bundle_id_names[item["id"]] = item["attributes"]["identifier"]
-              all_profiles.extend(page.get("data", []))
-              url = page.get("links", {}).get("next")
-
-          print(f"Fetched {len(all_profiles)} total profile(s) from App Store Connect:")
-          for profile in all_profiles:
-              attrs = profile["attributes"]
-              rel = profile["relationships"]["bundleId"]["data"]
-              bundle_identifier = bundle_id_names.get(rel["id"]) if rel else None
-              print(
-                  f"  - {attrs['name']!r} type={attrs['profileType']} state={attrs['profileState']} "
-                  f"bundleId={bundle_identifier} uuid={attrs['uuid']} expires={attrs['expirationDate']}"
-              )
-
-          profiles_by_bundle_id = {}
-          for profile in all_profiles:
-              attrs = profile["attributes"]
-              if attrs["profileType"] != "IOS_APP_STORE" or attrs["profileState"] != "ACTIVE":
-                  continue
-              rel = profile["relationships"]["bundleId"]["data"]
-              if rel is None:
-                  continue
-              identifier = bundle_id_names.get(rel["id"])
-              if identifier is None:
-                  continue
-              existing = profiles_by_bundle_id.get(identifier)
-              if existing is None or attrs["createdDate"] > existing["attributes"]["createdDate"]:
-                  profiles_by_bundle_id[identifier] = profile
-
-          profiles_dir = os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles")
-          os.makedirs(profiles_dir, exist_ok=True)
-
-          xcconfig_lines = [
-              "CODE_SIGN_STYLE = Manual",
-              f"DEVELOPMENT_TEAM = {team_id}",
-              'CODE_SIGN_IDENTITY = "Apple Distribution"',
-          ]
-          export_profiles = {}
-          missing = []
-
-          for target, bundle_id in TARGET_BUNDLE_IDS.items():
-              profile = profiles_by_bundle_id.get(bundle_id)
-              if profile is None:
-                  missing.append(bundle_id)
-                  continue
-              attrs = profile["attributes"]
-              uuid = attrs["uuid"]
-              content = base64.b64decode(attrs["profileContent"])
-              with open(os.path.join(profiles_dir, f"{uuid}.mobileprovision"), "wb") as f:
-                  f.write(content)
-              print(f"Installed profile for {bundle_id} ({target}): {attrs['name']} [{uuid}], expires {attrs['expirationDate']}")
-              xcconfig_lines.append(f'PROVISIONING_PROFILE_SPECIFIER[target={target}] = {uuid}')
-              export_profiles[bundle_id] = uuid
-
-          if missing:
-              print("::error::No ACTIVE App Store distribution profile found for: " + ", ".join(missing), file=sys.stderr)
-              print("Available bundle IDs with an ACTIVE App Store profile: " + ", ".join(sorted(profiles_by_bundle_id)), file=sys.stderr)
-              sys.exit(1)
-
-          with open("build/signing.xcconfig", "w") as f:
-              f.write("\n".join(xcconfig_lines) + "\n")
-
-          export_options = {
-              "method": "app-store-connect",
-              "teamID": team_id,
-              "signingStyle": "manual",
-              "stripSwiftSymbols": True,
-              "uploadSymbols": True,
-              "destination": "export",
-              "provisioningProfiles": export_profiles,
-          }
-          with open("build/exportOptions.plist", "wb") as f:
-              plistlib.dump(export_options, f)
-
-          print("Wrote build/signing.xcconfig and build/exportOptions.plist")
-          PYEOF
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+          echo "KEYCHAIN_CREATED=true" >> $GITHUB_ENV
+          echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
 
       - name: Build & Export Signed App Store Package
         run: |
           mkdir -p build/output
 
+          # Clean stale derived data and build artifacts from previous runs
+          rm -rf ~/Library/Developer/Xcode/DerivedData/sing-box-* build/HushTunnel.xcarchive build/output/*
+
           if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
             echo "Unlocking build signing keychain..."
             security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security default-keychain -s "$KEYCHAIN_PATH"
-            EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
-            security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+          fi
+
+          LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+            LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain"
+          fi
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security unlock-keychain -p "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            security list-keychains -d user -s "$KEYCHAIN_PATH" "$LOGIN_KEYCHAIN"
+          else
+            security list-keychains -d user -s "$KEYCHAIN_PATH"
           fi
 
           echo "Active codesigning identities in session:"
@@ -400,34 +242,77 @@ jobs:
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           BUILD_NUM="${{ env.APP_BUILD_NUMBER }}"
 
-          # NOTE: archiving must produce a *signed* app with the real entitlements
-          # (com.apple.developer.networking.networkextension, App Groups, etc.) baked
-          # in at compile time. Xcode only embeds those from a provisioning profile
-          # that actually declares the matching capabilities; without one it silently
-          # omits them, and no amount of re-signing at export time can add them back
-          # after the fact. Previously this step fell back to an UNSIGNED build
-          # (`CODE_SIGNING_ALLOWED=NO`) on any failure, which always shipped an
-          # archive with no entitlements at all -> "Missing Entitlement" on upload.
-          # Never fall back to an unsigned archive for an App Store build.
-          #
-          # Manual signing via build/signing.xcconfig (written by the previous
-          # step) pins each target to its real App Store distribution profile -
-          # see that step for why automatic signing doesn't work headlessly here.
-          echo "Building Release xcarchive with Xcode (manual signing)..."
-          xcodebuild archive \
-            -project sing-box.xcodeproj \
-            -scheme SFI \
-            -archivePath build/HushTunnel.xcarchive \
-            -destination "generic/platform=iOS" \
-            -xcconfig build/signing.xcconfig \
-            MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUM"
+          AUTH_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
 
-          echo "Exporting signed App Store IPA with manually pinned provisioning profiles..."
-          xcodebuild -exportArchive \
-            -archivePath build/HushTunnel.xcarchive \
-            -exportPath build/output \
-            -exportOptionsPlist build/exportOptions.plist
+          echo "Building Release xcarchive with Xcode (automatic signing)..."
+          if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
+            echo "Archiving with automatic signing + App Store Connect API key (-allowProvisioningUpdates)..."
+            xcodebuild archive \
+              -project sing-box.xcodeproj \
+              -scheme SFI \
+              -archivePath build/HushTunnel.xcarchive \
+              -destination "generic/platform=iOS" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$AUTH_KEY_PATH" \
+              -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+              -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM="8Q8Y559285" \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$BUILD_NUM"
+          else
+            echo "No App Store Connect API key available - archiving with automatic signing against locally installed profiles/identities..."
+            xcodebuild archive \
+              -project sing-box.xcodeproj \
+              -scheme SFI \
+              -archivePath build/HushTunnel.xcarchive \
+              -destination "generic/platform=iOS" \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM="8Q8Y559285" \
+              MARKETING_VERSION="$VERSION" \
+              CURRENT_PROJECT_VERSION="$BUILD_NUM"
+          fi
+
+          echo "Preparing exportOptions.plist for App Store..."
+          cat << 'PLIST_EOF' > build/exportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>8Q8Y559285</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>destination</key>
+              <string>export</string>
+          </dict>
+          </plist>
+          PLIST_EOF
+          sed -i "" "s/^[ 	]*//" build/exportOptions.plist || true
+
+          if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
+            echo "Exporting signed App Store IPA with automatic provisioning from App Store Connect..."
+            xcodebuild -exportArchive \
+              -archivePath build/HushTunnel.xcarchive \
+              -exportPath build/output \
+              -exportOptionsPlist build/exportOptions.plist \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$AUTH_KEY_PATH" \
+              -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+              -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
+          else
+            echo "Exporting with local keychain & provisioning profiles..."
+            xcodebuild -exportArchive \
+              -archivePath build/HushTunnel.xcarchive \
+              -exportPath build/output \
+              -exportOptionsPlist build/exportOptions.plist
+          fi
 
           if [ -f "build/output/HushTunnel.ipa" ]; then
             cp build/output/HushTunnel.ipa build/output/HushTunnel-$VERSION.ipa
@@ -531,19 +416,20 @@ jobs:
       - name: Clean signing credentials
         if: always()
         run: |
-          # Restore the runner's original default keychain and search list
-          # BEFORE deleting our temp keychain. Deleting a keychain that is
-          # still set as default leaves the session with no default keychain
-          # at all, which is what was causing the recurring
-          # "Keychain Not Found" dialog on the Mac mini's console.
-          if [ -n "$ORIGINAL_KEYCHAIN_SEARCH_LIST" ]; then
-            security list-keychains -d user -s $ORIGINAL_KEYCHAIN_SEARCH_LIST 2>/dev/null || true
+          LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+            LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain"
           fi
-          if [ -n "$ORIGINAL_DEFAULT_KEYCHAIN" ]; then
-            security default-keychain -s "$ORIGINAL_DEFAULT_KEYCHAIN" 2>/dev/null || true
+
+          # Restore the search list and default keychain to the host login keychain
+          # BEFORE deleting the temp keychain. This prevents the Mac mini from
+          # ever losing its default keychain ("Keychain Not Found" error).
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security default-keychain -s "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            security list-keychains -d user -s "$LOGIN_KEYCHAIN" 2>/dev/null || true
           fi
-          if [ -n "$KEYCHAIN_PATH" ]; then
+          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
             security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
           fi
-          rm -f "$RUNNER_TEMP/dist_cert.p12" "$RUNNER_TEMP/dist_cert.pem" "$RUNNER_TEMP/AppleWWDRCAG3.cer"
+          rm -f "$RUNNER_TEMP/dev_cert.p12" "$RUNNER_TEMP/dist_cert.p12" "$RUNNER_TEMP/dist_cert.pem" "$RUNNER_TEMP/AppleWWDRCAG3.cer"
           rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
