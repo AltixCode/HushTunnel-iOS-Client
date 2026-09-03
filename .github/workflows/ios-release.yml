@@ -175,11 +175,27 @@ jobs:
               --output "$WWDR_PATH"
             security import "$WWDR_PATH" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+            # Record the runner's current default keychain and search list so
+            # the cleanup step can put them back. Without this, setting our
+            # temp keychain as default and later deleting it (end of job)
+            # leaves the user session with NO default keychain at all -
+            # macOS then can't find anywhere to store items and starts
+            # popping "Keychain Not Found" dialogs on the console session,
+            # on every run, forever. Fall back to the standard login keychain
+            # path if none is set yet (e.g. after a keychain reset).
+            ORIGINAL_DEFAULT_KEYCHAIN=$(security default-keychain -d user 2>/dev/null | tr -d '[:space:]"')
+            if [ -z "$ORIGINAL_DEFAULT_KEYCHAIN" ]; then
+              ORIGINAL_DEFAULT_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+            fi
+            echo "ORIGINAL_DEFAULT_KEYCHAIN=$ORIGINAL_DEFAULT_KEYCHAIN" >> $GITHUB_ENV
+
             security default-keychain -s "$KEYCHAIN_PATH"
 
             # Keep the runner's other keychains in the search list because macOS
             # uses them for Apple's intermediate/root trust chain.
             EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
+            echo "ORIGINAL_KEYCHAIN_SEARCH_LIST=$EXISTING_KEYCHAINS" >> $GITHUB_ENV
             security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
 
             echo "Codesigning identities after import:"
@@ -515,6 +531,17 @@ jobs:
       - name: Clean signing credentials
         if: always()
         run: |
+          # Restore the runner's original default keychain and search list
+          # BEFORE deleting our temp keychain. Deleting a keychain that is
+          # still set as default leaves the session with no default keychain
+          # at all, which is what was causing the recurring
+          # "Keychain Not Found" dialog on the Mac mini's console.
+          if [ -n "$ORIGINAL_KEYCHAIN_SEARCH_LIST" ]; then
+            security list-keychains -d user -s $ORIGINAL_KEYCHAIN_SEARCH_LIST 2>/dev/null || true
+          fi
+          if [ -n "$ORIGINAL_DEFAULT_KEYCHAIN" ]; then
+            security default-keychain -s "$ORIGINAL_DEFAULT_KEYCHAIN" 2>/dev/null || true
+          fi
           if [ -n "$KEYCHAIN_PATH" ]; then
             security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
           fi
