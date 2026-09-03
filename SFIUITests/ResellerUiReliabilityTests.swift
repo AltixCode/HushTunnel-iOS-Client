@@ -52,6 +52,26 @@ final class ResellerUiReliabilityTests: XCTestCase {
             app.descendants(matching: .any)["hush.reseller.sub-qr-code"].firstMatch.waitForExistence(timeout: 8),
             "A subscription must render its subscription URL QR code instead of an empty white card"
         )
+
+        // Regression coverage for the manage-subscription actions: they used to
+        // sit as small buttons directly on the list row, right next to the
+        // row's own tap target, which made it easy to misclick "Revoke" while
+        // meaning to open this sheet. They now only live here, below the QR
+        // code, each with its own description. Tapping the row itself (above)
+        // must never surface a destructive confirmation on its own — only
+        // explicitly tapping "Revoke" below should.
+        XCTAssertTrue(app.staticTexts["Manage Subscription"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Extend Days"].exists)
+        XCTAssertTrue(app.buttons["Disable"].exists || app.buttons["Enable"].exists)
+        XCTAssertTrue(app.buttons["Reset UUID"].exists)
+        let revokeButton = app.buttons["Revoke"]
+        XCTAssertTrue(revokeButton.exists)
+
+        revokeButton.tap()
+        let revokeAlert = app.alerts["Revoke subscription?"]
+        XCTAssertTrue(revokeAlert.waitForExistence(timeout: 3), "Revoke must ask for confirmation before it fires")
+        revokeAlert.buttons["Cancel"].tap()
+
         connectionDetails.buttons["Done"].tap()
     }
 }

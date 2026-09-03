@@ -55,6 +55,10 @@ public struct ResellerHomeView: View {
     @State private var selectedCustomerForDetail: ResellerCustomer?
     @State private var prefilledOrderEmail = ""
     @State private var activeConnectionDetails: ResellerConnectionDetails?
+    // Paired with activeConnectionDetails only when the sheet is opened from
+    // the Subscriptions tab — nil for Orders / new-order-success, which have
+    // no subscription to manage.
+    @State private var activeSubscriptionActions: ResellerSubscriptionActions?
     @State private var showTransferFundsSheet = false
     @State private var transferInitialEmail = ""
     @State private var transferLockRecipient = false
@@ -119,7 +123,7 @@ public struct ResellerHomeView: View {
                     onResetUuid: { subId in try await resetUuid(id: subId) },
                     onResetTraffic: { subId in try await resetTraffic(id: subId) },
                     onRevoke: { subId in try await revokeSub(id: subId) },
-                    onSelectSub: { sub in
+                    onSelectSub: { sub, actions in
                         activeConnectionDetails = ResellerConnectionDetails(
                             title: sub.customerEmail,
                             planName: sub.planName,
@@ -129,6 +133,7 @@ public struct ResellerHomeView: View {
                             status: sub.isActive ? "ACTIVE" : "INACTIVE",
                             servers: sub.servers
                         )
+                        activeSubscriptionActions = actions
                     }
                 )
                 .tabItem {
@@ -156,6 +161,7 @@ public struct ResellerHomeView: View {
                             status: order.status,
                             servers: order.servers
                         )
+                        activeSubscriptionActions = nil
                     }
                 )
                 .tabItem {
@@ -323,11 +329,12 @@ public struct ResellerHomeView: View {
                             amountUsd: res.amountUsd,
                             servers: res.servers
                         )
+                        activeSubscriptionActions = nil
                     }
                 )
             }
-            .sheet(item: $activeConnectionDetails) { details in
-                ResellerConnectionQrSheetView(details: details)
+            .sheet(item: $activeConnectionDetails, onDismiss: { activeSubscriptionActions = nil }) { details in
+                ResellerConnectionQrSheetView(details: details, actions: activeSubscriptionActions)
             }
             .sheet(isPresented: $showDepositSheet) {
                 ResellerDepositSheetView(gateways: gateways, onCompleted: refreshAll)
@@ -802,19 +809,15 @@ public struct ResellerSubscriptionsTabView: View {
     let onResetUuid: (String) async throws -> Void
     let onResetTraffic: (String) async throws -> Void
     let onRevoke: (String) async throws -> Void
-    var onSelectSub: ((ResellerSubscription) -> Void)? = nil
+    // Carries the row's own management actions up to the parent, which hands
+    // them to the QR/details sheet. Management buttons used to live directly
+    // on the row, tightly packed next to the row's own tap target — easy to
+    // misclick "Revoke" when meaning to open the subscription. They now only
+    // exist inside the sheet, so the row itself is a single, unambiguous tap
+    // target that always opens details.
+    var onSelectSub: ((ResellerSubscription, ResellerSubscriptionActions) -> Void)? = nil
     @State private var search = ""
     @ObservedObject var lang = LanguageManager.shared
-
-    // Tracks which (subscriptionId, action) is currently in flight so only the
-    // tapped button shows a spinner, not every button on every row.
-    @State private var pendingAction: (String, String)?
-    // Disabling a subscription cuts a real customer's access, resetting the
-    // UUID breaks their existing VLESS link/QR immediately, and revoking
-    // deletes the subscription outright — all three need explicit confirmation
-    // before firing.
-    @State private var confirmTarget: (id: String, email: String, kind: String)?
-    @State private var errorMessage: String?
 
     private var filtered: [ResellerSubscription] {
         if search.isEmpty { return subscriptions }
@@ -825,37 +828,8 @@ public struct ResellerSubscriptionsTabView: View {
         }
     }
 
-    private func run(_ id: String, _ kind: String, _ action: @escaping () async throws -> Void) {
-        pendingAction = (id, kind)
-        errorMessage = nil
-        Task {
-            do {
-                try await action()
-            } catch {
-                await MainActor.run { errorMessage = error.localizedDescription }
-            }
-            await MainActor.run { pendingAction = nil }
-        }
-    }
-
-    @ViewBuilder
-    private func actionLabel(_ id: String, _ kind: String, _ text: String) -> some View {
-        if pendingAction?.0 == id && pendingAction?.1 == kind {
-            ProgressView().scaleEffect(0.7)
-        } else {
-            Text(text)
-        }
-    }
-
     public var body: some View {
         VStack(spacing: 0) {
-            if let err = errorMessage {
-                Text(err)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(.horizontal, 16)
-            }
-
             TextField(lang.tr("reseller.searchSubscriptions"), text: $search)
                 .padding(10)
                 .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -863,130 +837,73 @@ public struct ResellerSubscriptionsTabView: View {
                 .padding(16)
 
             List(filtered) { sub in
-            VStack(alignment: .leading, spacing: 10) {
                 Button {
-                    onSelectSub?(sub)
+                    onSelectSub?(
+                        sub,
+                        ResellerSubscriptionActions(
+                            subscriptionId: sub.id,
+                            isActive: sub.isActive,
+                            onExtend: { try await onExtend(sub.id) },
+                            onToggleDisable: { try await onToggle(sub.id, !sub.isActive) },
+                            onResetUuid: { try await onResetUuid(sub.id) },
+                            onRevoke: { try await onRevoke(sub.id) }
+                        )
+                    )
                 } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(sub.customerEmail)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(sub.customerEmail)
 
-                        Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Text(sub.isActive ? lang.tr("reseller.subStatusActive") : lang.tr("reseller.subStatusDisabled"))
+                            .font(.caption2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                            .foregroundColor(sub.isActive ? .green : .red)
+                            .cornerRadius(6)
                     }
-                    Spacer()
-                    Text(sub.isActive ? lang.tr("reseller.subStatusActive") : lang.tr("reseller.subStatusDisabled"))
-                        .font(.caption2)
-
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
-                        .foregroundColor(sub.isActive ? .green : .red)
-                        .cornerRadius(6)
-                }
+                    .padding(.vertical, 6)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .accessibilityIdentifier("hush.reseller.subscription-row")
-
-                // Action Row
-                HStack(spacing: 8) {
-                    Button {
-                        run(sub.id, "extend") { try await onExtend(sub.id) }
-                    } label: {
-                        actionLabel(sub.id, "extend", lang.tr("reseller.extend"))
-                    }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-                        .disabled(pendingAction != nil)
-
-                    Button {
-                        if sub.isActive {
-                            confirmTarget = (sub.id, sub.customerEmail, "disable")
-                        } else {
-                            run(sub.id, "toggle") { try await onToggle(sub.id, true) }
-                        }
-                    } label: {
-                        actionLabel(sub.id, "toggle", sub.isActive ? lang.tr("reseller.toggleDisable") : lang.tr("reseller.toggleEnable"))
-                    }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-                        .disabled(pendingAction != nil)
-
-                    Button {
-                        confirmTarget = (sub.id, sub.customerEmail, "resetUuid")
-                    } label: {
-                        actionLabel(sub.id, "resetUuid", lang.tr("reseller.resetUuid"))
-                    }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-                        .disabled(pendingAction != nil)
-
-                    Spacer()
-
-                    Button {
-                        confirmTarget = (sub.id, sub.customerEmail, "revoke")
-                    } label: {
-                        actionLabel(sub.id, "revoke", lang.tr("reseller.revoke"))
-                    }
-                        .font(.caption2)
-                        .foregroundColor(.red)
-                        .disabled(pendingAction != nil)
-                }
             }
-            .padding(.vertical, 6)
-        }
-        .id("subscriptions-\(lang.currentLanguage.rawValue)")
-        }
-        .alert(
-            confirmTargetTitle,
-            isPresented: Binding(get: { confirmTarget != nil }, set: { if !$0 { confirmTarget = nil } }),
-            presenting: confirmTarget
-        ) { target in
-            Button(lang.tr("common.cancel"), role: .cancel) {}
-            Button(lang.tr("common.confirm"), role: .destructive) {
-                switch target.kind {
-                case "disable":
-                    run(target.id, "toggle") { try await onToggle(target.id, false) }
-                case "resetUuid":
-                    run(target.id, "resetUuid") { try await onResetUuid(target.id) }
-                case "revoke":
-                    run(target.id, "revoke") { try await onRevoke(target.id) }
-                default:
-                    break
-                }
-            }
-        } message: { target in
-            Text(String(format: confirmTargetMessageFormat, target.email))
+            .id("subscriptions-\(lang.currentLanguage.rawValue)")
         }
     }
+}
 
-    private var confirmTargetTitle: String {
-        switch confirmTarget?.kind {
-        case "disable": return lang.tr("reseller.confirmDisableSubTitle")
-        case "resetUuid": return lang.tr("reseller.confirmResetUuidTitle")
-        case "revoke": return lang.tr("reseller.confirmRevokeTitle")
-        default: return ""
-        }
-    }
+// Bundles one subscription's management actions (extend / disable-enable /
+// reset UUID / revoke), already bound to its subscription id, so the QR
+// details sheet can render and confirm them without needing its own copy of
+// the API-calling closures.
+public struct ResellerSubscriptionActions {
+    public let subscriptionId: String
+    public let isActive: Bool
+    public let onExtend: () async throws -> Void
+    public let onToggleDisable: () async throws -> Void
+    public let onResetUuid: () async throws -> Void
+    public let onRevoke: () async throws -> Void
 
-    private var confirmTargetMessageFormat: String {
-        switch confirmTarget?.kind {
-        case "disable": return lang.tr("reseller.confirmDisableSubMessage")
-        case "resetUuid": return lang.tr("reseller.confirmResetUuidMessage")
-        case "revoke": return lang.tr("reseller.confirmRevokeMessage")
-        default: return "%@"
-        }
+    public init(
+        subscriptionId: String,
+        isActive: Bool,
+        onExtend: @escaping () async throws -> Void,
+        onToggleDisable: @escaping () async throws -> Void,
+        onResetUuid: @escaping () async throws -> Void,
+        onRevoke: @escaping () async throws -> Void
+    ) {
+        self.subscriptionId = subscriptionId
+        self.isActive = isActive
+        self.onExtend = onExtend
+        self.onToggleDisable = onToggleDisable
+        self.onResetUuid = onResetUuid
+        self.onRevoke = onRevoke
     }
 }
 
@@ -2015,10 +1932,36 @@ public struct ResellerConnectionDetails: Identifiable {
 
 public struct ResellerConnectionQrSheetView: View {
     let details: ResellerConnectionDetails
+    // Only set when this sheet was opened from the Subscriptions tab — nil
+    // for Orders and the new-order success screen, which have no
+    // subscription to manage. Gates the entire "Manage Subscription" section.
+    var actions: ResellerSubscriptionActions? = nil
     @Environment(\.dismiss) var dismiss
     @ObservedObject var lang = LanguageManager.shared
     @State private var copiedText: String?
     @State private var showAdvanced = false
+
+    // Management used to live as small buttons directly on the subscription
+    // list row, right next to the row's own tap target — easy to misclick
+    // (e.g. landing on Revoke while meaning to open this sheet). It now only
+    // lives here, after the QR code, with its own confirmation and a
+    // plain-language description of what each action does.
+    @State private var pendingActionKey: String?
+    @State private var confirmActionKey: String?
+    @State private var actionErrorMessage: String?
+
+    private func runAction(_ key: String, _ action: @escaping () async throws -> Void) {
+        pendingActionKey = key
+        actionErrorMessage = nil
+        Task {
+            do {
+                try await action()
+            } catch {
+                await MainActor.run { actionErrorMessage = error.localizedDescription }
+            }
+            await MainActor.run { pendingActionKey = nil }
+        }
+    }
 
     public var body: some View {
         NavigationStack {
@@ -2177,6 +2120,60 @@ public struct ResellerConnectionQrSheetView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+
+                    if let actions = actions {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if let err = actionErrorMessage {
+                                Text(err)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+
+                            Text(lang.tr("reseller.manageSubscriptionSection"))
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            ManageSubscriptionActionRow(
+                                title: lang.tr("reseller.extend"),
+                                description: lang.tr("reseller.extendDescription"),
+                                isDestructive: false,
+                                isPending: pendingActionKey == "extend",
+                                action: { runAction("extend") { try await actions.onExtend() } }
+                            )
+
+                            ManageSubscriptionActionRow(
+                                title: actions.isActive ? lang.tr("reseller.toggleDisable") : lang.tr("reseller.toggleEnable"),
+                                description: actions.isActive ? lang.tr("reseller.disableDescription") : lang.tr("reseller.enableDescription"),
+                                isDestructive: actions.isActive,
+                                isPending: pendingActionKey == "toggle",
+                                action: {
+                                    if actions.isActive {
+                                        confirmActionKey = "disable"
+                                    } else {
+                                        runAction("toggle") { try await actions.onToggleDisable() }
+                                    }
+                                }
+                            )
+
+                            ManageSubscriptionActionRow(
+                                title: lang.tr("reseller.resetUuid"),
+                                description: lang.tr("reseller.resetUuidDescription"),
+                                isDestructive: true,
+                                isPending: pendingActionKey == "resetUuid",
+                                action: { confirmActionKey = "resetUuid" }
+                            )
+
+                            ManageSubscriptionActionRow(
+                                title: lang.tr("reseller.revoke"),
+                                description: lang.tr("reseller.revokeDescription"),
+                                isDestructive: true,
+                                isPending: pendingActionKey == "revoke",
+                                action: { confirmActionKey = "revoke" }
+                            )
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                    }
                 }
                 .padding(.bottom, 24)
             }
@@ -2187,7 +2184,90 @@ public struct ResellerConnectionQrSheetView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .alert(
+                confirmActionTitle,
+                isPresented: Binding(get: { confirmActionKey != nil }, set: { if !$0 { confirmActionKey = nil } }),
+                presenting: confirmActionKey
+            ) { key in
+                Button(lang.tr("common.cancel"), role: .cancel) {}
+                Button(lang.tr("common.confirm"), role: .destructive) {
+                    guard let actions = actions else { return }
+                    switch key {
+                    case "disable":
+                        runAction("toggle") { try await actions.onToggleDisable() }
+                    case "resetUuid":
+                        runAction("resetUuid") { try await actions.onResetUuid() }
+                    case "revoke":
+                        runAction("revoke") { try await actions.onRevoke() }
+                    default:
+                        break
+                    }
+                }
+            } message: { _ in
+                Text(String(format: confirmActionMessageFormat, details.title))
+            }
         }
+    }
+
+    private var confirmActionTitle: String {
+        switch confirmActionKey {
+        case "disable": return lang.tr("reseller.confirmDisableSubTitle")
+        case "resetUuid": return lang.tr("reseller.confirmResetUuidTitle")
+        case "revoke": return lang.tr("reseller.confirmRevokeTitle")
+        default: return ""
+        }
+    }
+
+    private var confirmActionMessageFormat: String {
+        switch confirmActionKey {
+        case "disable": return lang.tr("reseller.confirmDisableSubMessage")
+        case "resetUuid": return lang.tr("reseller.confirmResetUuidMessage")
+        case "revoke": return lang.tr("reseller.confirmRevokeMessage")
+        default: return "%@"
+        }
+    }
+}
+
+// One row inside the QR sheet's "Manage Subscription" section: a title, a
+// plain-language description of what the action does and when a reseller
+// would need it, and a button — each is its own well-separated tap target,
+// unlike the old small buttons packed onto the list row.
+private struct ManageSubscriptionActionRow: View {
+    let title: String
+    let description: String
+    let isDestructive: Bool
+    let isPending: Bool
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(isDestructive ? .red : .primary)
+            Text(description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: action) {
+                HStack {
+                    Spacer()
+                    if isPending {
+                        ProgressView().scaleEffect(0.8)
+                    } else {
+                        Text(title)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.bordered)
+            .tint(isDestructive ? .red : .accentColor)
+            .disabled(isPending)
+        }
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(12)
     }
 }
 
