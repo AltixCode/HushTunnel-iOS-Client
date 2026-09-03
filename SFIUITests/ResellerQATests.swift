@@ -118,6 +118,14 @@ final class ResellerQATests: XCTestCase {
         // --- Step 6: multi-server QR sheet ---
         let connectionNav = app.navigationBars["Connection Details"]
         XCTAssertTrue(connectionNav.waitForExistence(timeout: 20), "Connection Details sheet did not open after order submit")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["hush.reseller.sub-qr-code"].firstMatch.waitForExistence(timeout: 8),
+            "The post-order screen did not render the new subscription QR code"
+        )
+        XCTAssertTrue(
+            app.buttons["Copy Subscription URL"].waitForExistence(timeout: 8),
+            "The post-order screen did not expose the new subscription URL"
+        )
         sleep(1) // let QR images render
         shot("07_qr_sheet_from_order_submit")
 

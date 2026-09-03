@@ -49,8 +49,8 @@ final class ResellerUiReliabilityTests: XCTestCase {
         let connectionDetails = app.navigationBars["Connection Details"]
         XCTAssertTrue(connectionDetails.waitForExistence(timeout: 8))
         XCTAssertTrue(
-            app.descendants(matching: .any)["hush.reseller.qr-code"].firstMatch.waitForExistence(timeout: 8),
-            "A subscription must render its QR code instead of an empty white card"
+            app.descendants(matching: .any)["hush.reseller.sub-qr-code"].firstMatch.waitForExistence(timeout: 8),
+            "A subscription must render its subscription URL QR code instead of an empty white card"
         )
         connectionDetails.buttons["Done"].tap()
     }
