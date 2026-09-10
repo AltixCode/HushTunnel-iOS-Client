@@ -1,0 +1,27 @@
+HushTunnel is a privacy-first, secure device-level VPN and edge network tunnel. VPN connectivity is HushTunnel's core and primary functionality, utilizing Apple's NetworkExtension framework to deliver end-to-end encrypted transit from your iOS device to global high-performance edge nodes.
+
+Whether browsing on public Wi-Fi or cellular networks, HushTunnel protects your personal data and network traffic from interception, throttling, and surveillance.
+
+KEY FEATURES:
+• Secure Device-Level VPN: Encrypted tunnel routes your device traffic safely through dedicated multi-node edge infrastructure.
+• Strict Zero-Log Privacy: We do not log, track, or monitor browsing history, DNS queries, traffic destinations, or packet payloads.
+• Intelligent Routing: Fast, low-latency connections across global edge locations.
+• Prominent Disclosure: Transparent in-app privacy and data processing disclosure shown before any connection is established.
+• Native Account Controls: In-app subscription management, purchase restoration, and permanent account deletion.
+
+IN-APP PURCHASES & SUBSCRIPTIONS:
+HushTunnel offers flexible auto-renewable subscription plans for high-speed VPN traffic quotas:
+• HushTunnel 1 Month: 30 days of full VPN access
+• HushTunnel 3 Months: 90 days of full VPN access
+• HushTunnel 12 Months: 365 days of full VPN access
+
+SUBSCRIPTION INFORMATION:
+• Payment will be charged to your Apple ID Account at confirmation of purchase.
+• Your subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current billing period.
+• Your account will be charged for renewal within 24 hours prior to the end of the current period at the rate of the selected plan.
+• You can manage and cancel your subscriptions at any time in your App Store Account Settings after purchase.
+• Existing subscriptions can be restored at any time via "Restore Purchases" in Account Settings.
+
+Privacy Policy: https://www.hushtunnel.com/privacy
+Terms of Use (EULA): https://www.hushtunnel.com/terms
+Support: support@hushtunnel.com

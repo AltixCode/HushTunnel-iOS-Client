@@ -1,0 +1,6 @@
+app_identifier("com.hushtunnel.ios")
+api_key_path("/Users/ata/Certificates/app_store_connect_api_key.json")
+skip_binary_upload(true)
+skip_screenshots(true)
+run_precheck_before_submit(false)
+force(true)

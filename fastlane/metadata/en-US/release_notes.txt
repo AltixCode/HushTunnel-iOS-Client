@@ -1,0 +1,5 @@
+What's New:
+- Added native in-app subscriptions and plan purchasing
+- Prominent privacy and data processing disclosure before connection
+- Performance optimizations and enhanced connection stability
+- Compliance updates adhering to latest App Store guidelines
