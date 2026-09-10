@@ -57,6 +57,7 @@ public struct ServerNodeItem: Codable, Identifiable, Hashable {
 }
 
 public struct MeResult: Codable {
+    public let userId: String
     public let email: String
     public let role: String
     public let subscriptions: [SubscriptionInfo]
@@ -65,8 +66,28 @@ public struct MeResult: Codable {
 
 public struct AuthResult: Codable {
     public let token: String
+    public let userId: String
     public let email: String
     public let role: String
+}
+
+public struct IAPSubscriptionProduct: Codable, Hashable {
+    public let productId: String
+    public let durationDays: Int
+}
+
+public struct IAPWalletProduct: Codable, Hashable {
+    public let productId: String
+    public let creditUsd: Double
+}
+
+public struct IAPConfig: Codable {
+    public let enabled: Bool
+    public let appUserId: String
+    public let publicSdkKey: String?
+    public let entitlementId: String
+    public let subscriptionProducts: [IAPSubscriptionProduct]
+    public let walletProducts: [IAPWalletProduct]
 }
 
 public struct GatewayInfo: Codable {

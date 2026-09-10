@@ -32,7 +32,6 @@ public struct ResellerHomeView: View {
     @State private var transactions: [WalletTransactionItem] = []
     @State private var subResellers: [SubReseller] = []
     @State private var plans: [PlanInfo] = []
-    @State private var gateways = GatewayInfo()
     @State private var servers: [ServerNodeItem] = []
     @State private var selectedServer: ServerNodeItem? = nil
     @State private var showServerPickerSheet = false
@@ -49,7 +48,8 @@ public struct ResellerHomeView: View {
     @State private var showSelfSubSheet = false
     @State private var showAddCustomerSheet = false
     @State private var showCreateOrderSheet = false
-    @State private var showDepositSheet = false
+    @State private var showIAPSheet = false
+    @State private var showAccountSettings = false
     @State private var showAddSubResellerSheet = false
     @State private var showLanguagePicker = false
     @State private var selectedCustomerForDetail: ResellerCustomer?
@@ -81,7 +81,7 @@ public struct ResellerHomeView: View {
                     selectedServer: selectedServer,
                     prepareForConnect: prepareConnection,
                     onOpenServerPicker: { showServerPickerSheet = true },
-                    onCreateSelfSub: { showSelfSubSheet = true }
+                    onCreateSelfSub: { showIAPSheet = true }
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.vpn"), systemImage: "shield.fill")
@@ -91,7 +91,7 @@ public struct ResellerHomeView: View {
                 // Tab 1: Dashboard & Wallet
                 ResellerDashboardTabView(
                     overview: overview,
-                    onAddFunds: { showDepositSheet = true },
+                    onAddFunds: { showIAPSheet = true },
                     onNewCustomer: { showAddCustomerSheet = true },
                     onNewReseller: { showAddSubResellerSheet = true },
                     onNewOrder: { showCreateOrderSheet = true }
@@ -224,11 +224,20 @@ public struct ResellerHomeView: View {
                         }
 
                         Button {
-                            authStore.logout()
+                            Task {
+                                try? await environments.extensionProfile?.stop()
+                                RevenueCatManager.shared.clearCachedProducts()
+                                authStore.logout()
+                            }
                         } label: {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                                 .foregroundColor(.red)
                         }
+
+                        Button { showAccountSettings = true } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityIdentifier("hush.account.settings-button")
                     }
                 }
             }
@@ -336,8 +345,11 @@ public struct ResellerHomeView: View {
             .sheet(item: $activeConnectionDetails, onDismiss: { activeSubscriptionActions = nil }) { details in
                 ResellerConnectionQrSheetView(details: details, actions: activeSubscriptionActions)
             }
-            .sheet(isPresented: $showDepositSheet) {
-                ResellerDepositSheetView(gateways: gateways, onCompleted: refreshAll)
+            .sheet(isPresented: $showIAPSheet) {
+                InAppPurchaseSheetView(onPurchaseCompleted: refreshAll)
+            }
+            .sheet(isPresented: $showAccountSettings) {
+                AccountSettingsSheetView()
             }
             .sheet(isPresented: $showAddSubResellerSheet) {
                 ResellerAddSubResellerSheetView(balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)
@@ -392,7 +404,6 @@ public struct ResellerHomeView: View {
             let ord = try? await ApiClient.shared.resellerOrders()
             let dep = try? await ApiClient.shared.resellerDeposits()
             let pl = try? await ApiClient.shared.plans()
-            let gw = try? await ApiClient.shared.gateways()
             let subRes = try? await ApiClient.shared.resellerSubResellers()
             let tx = try? await ApiClient.shared.walletTransactions()
 
@@ -413,7 +424,6 @@ public struct ResellerHomeView: View {
                 if let ord { self.orders = ord }
                 if let dep { self.deposits = dep }
                 if let pl { self.plans = pl }
-                if let gw { self.gateways = gw }
                 if let subRes { self.subResellers = subRes }
                 if let tx { self.transactions = tx }
                 self.isLoading = false
@@ -625,6 +635,7 @@ public struct ResellerPersonalVpnTabView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                         }
+                        .accessibilityIdentifier("hush.iap.open-subscriptions")
                         .padding(.top, 6)
                     }
                     .padding(24)
@@ -675,10 +686,10 @@ public struct ResellerDashboardTabView: View {
                         }
                     }
 
-                    Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                    Button(action: onAddFunds) {
                         HStack {
-                            Image(systemName: "arrow.up.forward.app.fill")
-                            Text("Top Up at hushtunnel.com")
+                            Image(systemName: "creditcard.fill")
+                            Text(lang.tr("iap.addFunds"))
                                 
                         }
                         .frame(maxWidth: .infinity)
@@ -687,6 +698,7 @@ public struct ResellerDashboardTabView: View {
                         .foregroundColor(.white)
                         .cornerRadius(10)
                     }
+                    .accessibilityIdentifier("hush.iap.open-wallet")
                 }
                 .padding(20)
                 .background(Color(uiColor: .systemBackground))
@@ -1614,115 +1626,6 @@ public struct ResellerCreateOrderSheetView: View {
                     isProcessing = false
                     dismiss()
                     onOrderSuccess?(res)
-                    onCompleted()
-                }
-            } catch {
-                await MainActor.run {
-                    isProcessing = false
-                    errorMessage = error.localizedDescription
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Reseller Deposit Sheet
-
-public struct ResellerDepositSheetView: View {
-    let gateways: GatewayInfo
-    let onCompleted: () -> Void
-    @Environment(\.dismiss) var dismiss
-    @State private var amountString = "50"
-    @State private var selectedGateway = "MANUAL"
-    @State private var isProcessing = false
-    @State private var errorMessage: String?
-
-    public var body: some View {
-        NavigationStack {
-            Form {
-                Section(header: Text("Deposit Amount (USD)")) {
-                    TextField("Amount in USD", text: $amountString)
-                        .keyboardType(.decimalPad)
-                }
-
-                Section(header: Text("Payment Method")) {
-                    if gateways.cryptomus {
-                        HStack {
-                            Text("Cryptomus (USDT/Crypto)")
-                            Spacer()
-                            if selectedGateway == "CRYPTOMUS" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "CRYPTOMUS" }
-                    }
-
-                    if gateways.nowpayments {
-                        HStack {
-                            Text("NOWPayments")
-                            Spacer()
-                            if selectedGateway == "NOWPAYMENTS" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "NOWPAYMENTS" }
-                    }
-
-                    if gateways.revolut {
-                        HStack {
-                            Text("Revolut Pay")
-                            Spacer()
-                            if selectedGateway == "REVOLUT" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "REVOLUT" }
-                    }
-
-                    HStack {
-                        Text("Manual / Admin Credit")
-                        Spacer()
-                        if selectedGateway == "MANUAL" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedGateway = "MANUAL" }
-                }
-
-                if let err = errorMessage {
-                    Section { Text(err).foregroundColor(.red).font(.caption) }
-                }
-
-                Section {
-                    Button(action: handleDeposit) {
-                        HStack {
-                            Spacer()
-                            if isProcessing { ProgressView().padding(.trailing, 8) }
-                            Text("Deposit Funds")
-                            Spacer()
-                        }
-                    }
-                    .disabled((Double(amountString) ?? 0) <= 0 || isProcessing)
-                }
-            }
-            .navigationTitle("Add Balance")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-    }
-
-    private func handleDeposit() {
-        guard let amount = Double(amountString), amount > 0 else { return }
-        isProcessing = true
-        errorMessage = nil
-        Task {
-            do {
-                let res = try await ApiClient.shared.createResellerDeposit(amountUsd: amount, gateway: selectedGateway)
-                await MainActor.run {
-                    isProcessing = false
-                    if let urlStr = res.checkoutUrl, let url = URL(string: urlStr) {
-                        UIApplication.shared.open(url)
-                    }
-                    dismiss()
                     onCompleted()
                 }
             } catch {

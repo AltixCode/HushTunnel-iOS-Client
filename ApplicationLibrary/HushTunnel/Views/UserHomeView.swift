@@ -7,6 +7,7 @@ public struct UserHomeView: View {
     @EnvironmentObject private var environments: ExtensionEnvironments
 
     @State private var meResult: MeResult? = MeResult(
+        userId: "mock-user",
         email: "demo@hushtunnel.com",
         role: "USER",
         subscriptions: [
@@ -55,6 +56,8 @@ public struct UserHomeView: View {
     @State private var showChangePasswordSheet = false
     @State private var showDebugLogs = false
     @State private var showServerPickerSheet = false
+    @State private var showIAPSheet = false
+    @State private var showAccountSettings = false
     @State private var selectedServer: ServerNodeItem? = nil
 
     private var currentDisplayServer: ServerNodeItem {
@@ -211,28 +214,25 @@ public struct UserHomeView: View {
                             .padding(.horizontal, 16)
                         }
 
-                        // Official Web Store & Renewal Notice Card
+                        // App Store-compliant subscription and wallet purchases.
                         VStack(alignment: .leading, spacing: 14) {
                             HStack(spacing: 10) {
-                                Image(systemName: "globe.americas.fill")
+                                Image(systemName: "creditcard.fill")
                                     .font(.title3)
                                     .foregroundColor(.accentColor)
-                                Text(lang.tr("web.storeNotice"))
+                                Text(lang.tr("iap.title"))
                                     .font(.headline)
                                     .foregroundColor(.primary)
                             }
-
-                            Text(lang.tr("web.storeDesc"))
+                            Text(lang.tr("iap.description"))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-
-                            Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                            Button { showIAPSheet = true } label: {
                                 HStack {
-                                    Image(systemName: "arrow.up.right.square")
-                                    Text("https://www.hushtunnel.com")
-                                        .fontWeight(.semibold)
+                                    Image(systemName: "apple.logo")
+                                    Text(lang.tr("iap.subscriptions")).fontWeight(.semibold)
                                     Spacer()
-                                    Image(systemName: "safari")
+                                    Image(systemName: "chevron.right")
                                 }
                                 .padding(12)
                                 .frame(maxWidth: .infinity)
@@ -240,29 +240,7 @@ public struct UserHomeView: View {
                                 .foregroundColor(.accentColor)
                                 .cornerRadius(12)
                             }
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "checkmark.shield.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.accentColor)
-                                        .padding(.top, 2)
-                                    Text(lang.tr("web.paymentMethods"))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "person.2.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.blue)
-                                        .padding(.top, 2)
-                                    Text(lang.tr("web.resellerNotice"))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.top, 4)
+                            .accessibilityIdentifier("hush.iap.open")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(20)
@@ -335,11 +313,20 @@ public struct UserHomeView: View {
                         }
 
                         Button {
-                            authStore.logout()
+                            Task {
+                                try? await environments.extensionProfile?.stop()
+                                RevenueCatManager.shared.clearCachedProducts()
+                                authStore.logout()
+                            }
                         } label: {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                                 .foregroundColor(.red)
                         }
+
+                        Button { showAccountSettings = true } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityIdentifier("hush.account.settings-button")
                     }
                 }
             }
@@ -377,6 +364,12 @@ public struct UserHomeView: View {
             }
             .sheet(isPresented: $showOrdersSheet) {
                 OrdersListView()
+            }
+            .sheet(isPresented: $showIAPSheet) {
+                InAppPurchaseSheetView(onPurchaseCompleted: refreshData)
+            }
+            .sheet(isPresented: $showAccountSettings) {
+                AccountSettingsSheetView()
             }
             .task {
                 await environments.reload()
@@ -504,20 +497,9 @@ public struct SubscriptionCardView: View {
 
                 Spacer()
 
-                Link(destination: URL(string: "https://www.hushtunnel.com")!) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption2)
-                        Text(lang.tr("vpn.renew"))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.accentColor.opacity(0.15))
-                    .foregroundColor(.accentColor)
-                    .cornerRadius(8)
-                }
+                Image(systemName: sub.isActive ? "checkmark.shield.fill" : "clock.badge.exclamationmark")
+                    .foregroundColor(sub.isActive ? .green : .orange)
+                    .accessibilityHidden(true)
             }
 
             // Usage Bar

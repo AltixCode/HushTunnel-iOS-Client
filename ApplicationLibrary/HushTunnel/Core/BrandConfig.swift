@@ -9,5 +9,7 @@ public enum BrandConfig {
     #endif
     public static let appScheme = "hushtunnel"
     public static let supportURL = "https://www.hushtunnel.com"
+    public static let privacyURL = "https://www.hushtunnel.com/privacy"
+    public static let termsURL = "https://www.hushtunnel.com/terms"
     public static let appGroupID = "group.com.hushtunnel.vpn"
 }

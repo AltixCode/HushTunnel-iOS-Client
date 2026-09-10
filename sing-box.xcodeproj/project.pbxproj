@@ -70,6 +70,7 @@
 		3AF7B20B2FF10003000A0001 /* Library.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC211D2A459B4700A63465 /* Library.framework */; };
 		3AF7B20C2FF10003000A0001 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
 		3AF7B20D2FF10003000A0001 /* ShareExtension.System.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3AF7B2022FF10003000A0001 /* ShareExtension.System.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1B2C3D4E5F60718293A4B5C /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718293A4B5D /* RevenueCat */; };
 		3AFE19402EF5677100F61E06 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AC72A302EED94F60039DEA4 /* SystemConfiguration.framework */; };
 		9C37F17D2C131100001B9FA8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
 		9C37F17E2C131100001B9FA8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
@@ -778,6 +779,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F60718293A4B5C /* RevenueCat in Frameworks */,
 				3A4CA8CC2F75381F009C36CA /* MarkdownUI in Frameworks */,
 				3A4EAD1B2A4FEB02005435B3 /* Library.framework in Frameworks */,
 				3A4A020D2B53E3DC004EFB87 /* QRCode in Frameworks */,
@@ -1115,6 +1117,7 @@
 			packageProductDependencies = (
 				3A4A020C2B53E3DC004EFB87 /* QRCode */,
 				3A4CA8CB2F75381F009C36CA /* MarkdownUI */,
+				A1B2C3D4E5F60718293A4B5D /* RevenueCat */,
 			);
 			productName = ApplicationLibrary;
 			productReference = 3A4EAD102A4FEAE6005435B3 /* ApplicationLibrary.framework */;
@@ -1667,6 +1670,7 @@
 				3A4CA8CA2F75381F009C36CA /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				3A5AA1B82F7DB10900BA2A0D /* XCRemoteSwiftPackageReference "plcrashreporter" */,
 				3AC89DD32FCD9E3B002A14E8 /* XCRemoteSwiftPackageReference "DeviceKit" */,
+				A1B2C3D4E5F60718293A4B5E /* XCRemoteSwiftPackageReference "purchases-ios" */,
 			);
 			productRefGroup = 3AEC20C72A45991900A63465 /* Products */;
 			projectDirPath = "";
@@ -4087,6 +4091,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		A1B2C3D4E5F60718293A4B5E /* XCRemoteSwiftPackageReference "purchases-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.83.2;
+			};
+		};
 		3A017F902A4AB2E4009149FA /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift";
@@ -4154,6 +4166,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A1B2C3D4E5F60718293A4B5D /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60718293A4B5E /* XCRemoteSwiftPackageReference "purchases-ios" */;
+			productName = RevenueCat;
+		};
 		3A017F912A4AB2E4009149FA /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 3A017F902A4AB2E4009149FA /* XCRemoteSwiftPackageReference "GRDB" */;

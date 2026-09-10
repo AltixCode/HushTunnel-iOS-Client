@@ -8,7 +8,6 @@ import UIKit
 import UserNotifications
 
 class ApplicationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    private var profileServer: ProfileServer?
     private var reportTransferServer: ReportTransferServer?
 
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -86,16 +85,6 @@ class ApplicationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCe
 
     private nonisolated func setupBackground() async {
         if #available(iOS 16.0, *) {
-            do {
-                let profileServer = try ProfileServer()
-                profileServer.start()
-                await MainActor.run {
-                    self.profileServer = profileServer
-                }
-                NSLog("started profile server")
-            } catch {
-                NSLog("setup profile server error: \(error.localizedDescription)")
-            }
             do {
                 let reportTransferServer = try ReportTransferServer()
                 reportTransferServer.start()

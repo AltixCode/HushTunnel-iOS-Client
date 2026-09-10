@@ -123,6 +123,16 @@ private final class RedirectDelegate: NSObject, URLSessionTaskDelegate, Sendable
         return try await perform(request)
     }
 
+    public func iapConfig() async throws -> IAPConfig {
+        let request = try makeRequest(path: "/api/mobile/iap/config", queryItems: [URLQueryItem(name: "platform", value: "ios")])
+        return try await perform(request)
+    }
+
+    public func deleteAccount(password: String) async throws {
+        let request = try makeRequest(path: "/api/mobile/account", method: "DELETE", body: ["password": password])
+        let _: SimpleSuccessResponse = try await perform(request)
+    }
+
     public func plans() async throws -> [PlanInfo] {
         let request = try makeRequest(path: "/api/mobile/plans", queryItems: [await localeQueryItem()])
         let res: PlansResponse = try await perform(request)
