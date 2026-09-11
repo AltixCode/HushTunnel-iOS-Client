@@ -241,8 +241,6 @@ jobs:
 
           # Clean stale build artifacts and local CI derived data
           rm -rf build/HushTunnel.xcarchive build/output/* build/DerivedData/* 2>/dev/null || true
-          # Safely attempt removing host derived data, ignoring in-use index files from active Xcode
-          rm -rf ~/Library/Developer/Xcode/DerivedData/sing-box-* 2>/dev/null || true
 
           if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
             echo "Unlocking build signing keychain..."
