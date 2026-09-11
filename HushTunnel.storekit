@@ -1,0 +1,240 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : ""
+      }
+    ]
+  },
+  "identifier" : "HushTunnelStoreKit",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "5.0",
+      "familyShareable" : false,
+      "internalID" : "1000001",
+      "localizations" : [
+        {
+          "description" : "$5 HushTunnel Wallet Credit",
+          "displayName" : "Add $5 Funds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "hushtunnel_funds_5",
+      "referenceName" : "HushTunnel Funds $5",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "10.0",
+      "familyShareable" : false,
+      "internalID" : "1000002",
+      "localizations" : [
+        {
+          "description" : "$10 HushTunnel Wallet Credit",
+          "displayName" : "Add $10 Funds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "hushtunnel_funds_10",
+      "referenceName" : "HushTunnel Funds $10",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "25.0",
+      "familyShareable" : false,
+      "internalID" : "1000003",
+      "localizations" : [
+        {
+          "description" : "$25 HushTunnel Wallet Credit",
+          "displayName" : "Add $25 Funds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "hushtunnel_funds_25",
+      "referenceName" : "HushTunnel Funds $25",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "50.0",
+      "familyShareable" : false,
+      "internalID" : "1000004",
+      "localizations" : [
+        {
+          "description" : "$50 HushTunnel Wallet Credit",
+          "displayName" : "Add $50 Funds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "hushtunnel_funds_50",
+      "referenceName" : "HushTunnel Funds $50",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "100.0",
+      "familyShareable" : false,
+      "internalID" : "1000005",
+      "localizations" : [
+        {
+          "description" : "$100 HushTunnel Wallet Credit",
+          "displayName" : "Add $100 Funds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "hushtunnel_funds_100",
+      "referenceName" : "HushTunnel Funds $100",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "22376110",
+      "localizations" : [
+        {
+          "description" : "HushTunnel Access Subscriptions",
+          "displayName" : "HushTunnel Access",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "HushTunnel Access",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "3.0",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "2000001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "1 month of unrestricted VPN access.",
+              "displayName" : "1 Month",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "hushtunnel_1month",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "HushTunnel Monthly",
+          "subscriptionGroupID" : "22376110",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "7.0",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "2000002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "3 months of unrestricted VPN access.",
+              "displayName" : "3 Months",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "hushtunnel_3_months",
+          "recurringSubscriptionPeriod" : "P3M",
+          "referenceName" : "HushTunnel 3 Months",
+          "subscriptionGroupID" : "22376110",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "12.0",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "2000003",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "6 months of unrestricted VPN access.",
+              "displayName" : "6 Months",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "hushtunnel_6_months",
+          "recurringSubscriptionPeriod" : "P6M",
+          "referenceName" : "HushTunnel 6 Months",
+          "subscriptionGroupID" : "22376110",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "20.0",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "2000004",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "1 year of unrestricted VPN access.",
+              "displayName" : "Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "hushtunnel_12_months",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "HushTunnel Annual",
+          "subscriptionGroupID" : "22376110",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
