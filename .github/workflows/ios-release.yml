@@ -105,7 +105,7 @@ jobs:
 
       - name: Resolve Swift Package Dependencies
         run: |
-          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj -derivedDataPath build/DerivedData
+          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj -scheme SFI -derivedDataPath build/DerivedData
 
       - name: Compute Dynamic Version
         run: |
