@@ -105,7 +105,7 @@ jobs:
 
       - name: Resolve Swift Package Dependencies
         run: |
-          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj
+          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj -derivedDataPath build/DerivedData
 
       - name: Compute Dynamic Version
         run: |
@@ -235,11 +235,13 @@ jobs:
           echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
 
       - name: Build & Export Signed App Store Package
-        run: |
           mkdir -p build/output
+          mkdir -p build/DerivedData
 
-          # Clean stale derived data and build artifacts from previous runs
-          rm -rf ~/Library/Developer/Xcode/DerivedData/sing-box-* build/HushTunnel.xcarchive build/output/*
+          # Clean stale build artifacts and local CI derived data
+          rm -rf build/HushTunnel.xcarchive build/output/* build/DerivedData/* 2>/dev/null || true
+          # Safely attempt removing host derived data, ignoring in-use index files from active Xcode
+          rm -rf ~/Library/Developer/Xcode/DerivedData/sing-box-* 2>/dev/null || true
 
           if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
             echo "Unlocking build signing keychain..."
@@ -271,11 +273,13 @@ jobs:
               -project sing-box.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
+              -derivedDataPath build/DerivedData \
               -destination "generic/platform=iOS" \
               -allowProvisioningUpdates \
               -authenticationKeyPath "$AUTH_KEY_PATH" \
               -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
               -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" \
+              COMPILER_INDEX_STORE_ENABLE=NO \
               CODE_SIGN_STYLE=Automatic \
               DEVELOPMENT_TEAM="8Q8Y559285" \
               MARKETING_VERSION="$VERSION" \
@@ -286,7 +290,9 @@ jobs:
               -project sing-box.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
+              -derivedDataPath build/DerivedData \
               -destination "generic/platform=iOS" \
+              COMPILER_INDEX_STORE_ENABLE=NO \
               CODE_SIGN_STYLE=Automatic \
               DEVELOPMENT_TEAM="8Q8Y559285" \
               MARKETING_VERSION="$VERSION" \
@@ -321,6 +327,7 @@ jobs:
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
+              -derivedDataPath build/DerivedData \
               -exportOptionsPlist build/exportOptions.plist \
               -allowProvisioningUpdates \
               -authenticationKeyPath "$AUTH_KEY_PATH" \
@@ -331,6 +338,7 @@ jobs:
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
+              -derivedDataPath build/DerivedData \
               -exportOptionsPlist build/exportOptions.plist
           fi
 
