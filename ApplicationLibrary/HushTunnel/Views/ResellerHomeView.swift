@@ -508,80 +508,94 @@ public struct ResellerPersonalVpnTabView: View {
     let onCreateSelfSub: () -> Void
     @ObservedObject var lang = LanguageManager.shared
 
+    private var hasActiveSubscription: Bool {
+        personalSub?.isActive == true
+    }
+
+    private var isConnected: Bool {
+        extensionProfile?.status == .connected || extensionProfile?.status == .reasserting
+    }
+
+    private var shouldShowTunnelUI: Bool {
+        hasActiveSubscription || isConnected
+    }
+
     public var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Connect Circle — wired to the real ExtensionProfile the same
-                // way UserHomeView is; a reseller is also a customer of their
-                // own service and gets the same working connect/disconnect.
-                if let profile = extensionProfile {
-                    ConnectCircleButton(
-                        profile: profile,
-                        isProvisioning: isProvisioning,
-                        prepareForConnect: prepareForConnect
-                    )
-                        .padding(.top, 24)
-                    ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
-                    let currentServer = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
-                    ConnectionTestView(profile: profile, expectedHost: currentServer?.host ?? "")
-                } else {
-                    ZStack {
-                        Circle()
-                            .fill(Color.gray.opacity(0.4))
-                            .frame(width: 140, height: 140)
-                        ProgressView()
-                    }
-                    .padding(.top, 24)
-                }
-
-                if let provisionError {
-                    Text(provisionError)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                }
-
-                // Server Location Selector Card
-                Button(action: onOpenServerPicker) {
-                    HStack(spacing: 14) {
+                if shouldShowTunnelUI {
+                    // Connect Circle — wired to the real ExtensionProfile the same
+                    // way UserHomeView is; a reseller is also a customer of their
+                    // own service and gets the same working connect/disconnect.
+                    if let profile = extensionProfile {
+                        ConnectCircleButton(
+                            profile: profile,
+                            isProvisioning: isProvisioning,
+                            prepareForConnect: prepareForConnect
+                        )
+                            .padding(.top, 24)
+                        ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
                         let currentServer = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
-                        Text(currentServer?.flag ?? "🇳🇱")
-                            .font(.system(size: 30))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(currentServer?.name ?? "Netherlands 01 (Amsterdam)")
-                                .font(.headline)
-                                .foregroundColor(.primary)
-
-                            Text("\(currentServer?.city ?? currentServer?.countryCode ?? "Amsterdam") · VLESS-Reality")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        ConnectionTestView(profile: profile, expectedHost: currentServer?.host ?? "")
+                    } else {
+                        ZStack {
+                            Circle()
+                                .fill(Color.gray.opacity(0.4))
+                                .frame(width: 140, height: 140)
+                            ProgressView()
                         }
-
-                        Spacer()
-
-                        HStack(spacing: 4) {
-                            Text("Switch")
-                                .font(.caption)
-                                
-                                .foregroundColor(.accentColor)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundColor(.accentColor)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.12))
-                        .cornerRadius(8)
+                        .padding(.top, 24)
                     }
-                    .padding(16)
-                    .background(Color(uiColor: .systemBackground))
-                    .cornerRadius(20)
-                    .padding(.horizontal, 16)
+
+                    if let provisionError {
+                        Text(provisionError)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                    }
+
+                    // Server Location Selector Card
+                    Button(action: onOpenServerPicker) {
+                        HStack(spacing: 14) {
+                            let currentServer = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
+                            Text(currentServer?.flag ?? "🇳🇱")
+                                .font(.system(size: 30))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(currentServer?.name ?? "Netherlands 01 (Amsterdam)")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+
+                                Text("\(currentServer?.city ?? currentServer?.countryCode ?? "Amsterdam") · VLESS-Reality")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: 4) {
+                                Text("Switch")
+                                    .font(.caption)
+                                    
+                                    .foregroundColor(.accentColor)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundColor(.accentColor)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.accentColor.opacity(0.12))
+                            .cornerRadius(8)
+                        }
+                        .padding(16)
+                        .background(Color(uiColor: .systemBackground))
+                        .cornerRadius(20)
+                        .padding(.horizontal, 16)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(isProvisioning)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .disabled(isProvisioning)
 
                 // Personal VPN Status Card
                 if let sub = personalSub {

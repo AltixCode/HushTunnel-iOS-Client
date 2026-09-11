@@ -6,46 +6,7 @@ public struct UserHomeView: View {
     @ObservedObject var lang = LanguageManager.shared
     @EnvironmentObject private var environments: ExtensionEnvironments
 
-    @State private var meResult: MeResult? = MeResult(
-        userId: "mock-user",
-        email: "demo@hushtunnel.com",
-        role: "USER",
-        subscriptions: [
-            SubscriptionInfo(
-                id: "sub-101",
-                planName: "Pro Freedom Plan (30 Days)",
-                expiryDate: "2026-10-01T00:00:00Z",
-                isActive: true,
-                usedBytes: 38_500_000_000,
-                totalBytes: 100_000_000_000,
-                subscriptionUrl: "vless://auto-config@5.255.125.216:443"
-            )
-        ],
-        servers: [
-            ServerNodeItem(
-                id: "netherlands-primary",
-                name: "Netherlands 01 (Amsterdam)",
-                countryCode: "NL",
-                flag: "🇳🇱",
-                city: "Amsterdam",
-                host: "5.255.125.216",
-                port: 443,
-                protocolName: "vless",
-                isDefault: true
-            ),
-            ServerNodeItem(
-                id: "germany-frankfurt",
-                name: "Germany 01 (Frankfurt)",
-                countryCode: "DE",
-                flag: "🇩🇪",
-                city: "Frankfurt",
-                host: "142.132.170.81",
-                port: 443,
-                protocolName: "vless",
-                isDefault: false
-            )
-        ]
-    )
+    @State private var meResult: MeResult? = nil
     @State private var isLoading = false
     @State private var isProvisioning = true
     @State private var errorMessage: String?
@@ -59,6 +20,19 @@ public struct UserHomeView: View {
     @State private var showIAPSheet = false
     @State private var showAccountSettings = false
     @State private var selectedServer: ServerNodeItem? = nil
+
+    private var hasActiveSubscription: Bool {
+        guard let subs = meResult?.subscriptions else { return false }
+        return subs.contains(where: { $0.isActive })
+    }
+
+    private var isConnected: Bool {
+        environments.extensionProfile?.status == .connected || environments.extensionProfile?.status == .reasserting
+    }
+
+    private var shouldShowTunnelUI: Bool {
+        hasActiveSubscription || isConnected
+    }
 
     private var currentDisplayServer: ServerNodeItem {
         if let selected = selectedServer { return selected }
@@ -89,95 +63,100 @@ public struct UserHomeView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Status & Connect Section
-                        VStack(spacing: 24) {
-                            if let profile = environments.extensionProfile {
-                                ConnectCircleButton(
-                                    profile: profile,
-                                    isProvisioning: isProvisioning,
-                                    prepareForConnect: prepareConnection
-                                )
+                        if isLoading && meResult == nil {
+                            ProgressView()
+                                .padding(.vertical, 40)
+                        } else if shouldShowTunnelUI {
+                            // Status & Connect Section
+                            VStack(spacing: 24) {
+                                if let profile = environments.extensionProfile {
+                                    ConnectCircleButton(
+                                        profile: profile,
+                                        isProvisioning: isProvisioning,
+                                        prepareForConnect: prepareConnection
+                                    )
+                                        .padding(.top, 24)
+                                    ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
+                                    ConnectionTestView(profile: profile, expectedHost: currentDisplayServer.host)
+                                } else {
+                                    Button {
+                                        Task {
+                                            try? await ExtensionProfile.install()
+                                            await environments.reload()
+                                        }
+                                    } label: {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.accentColor.opacity(0.15))
+                                                .frame(width: 140, height: 140)
+                                            Image(systemName: "power")
+                                                .font(.system(size: 48, weight: .semibold))
+                                                .foregroundColor(.accentColor)
+                                        }
+                                    }
                                     .padding(.top, 24)
-                                ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
-                                ConnectionTestView(profile: profile, expectedHost: currentDisplayServer.host)
-                            } else {
-                                Button {
-                                    Task {
-                                        try? await ExtensionProfile.install()
-                                        await environments.reload()
-                                    }
-                                } label: {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.accentColor.opacity(0.15))
-                                            .frame(width: 140, height: 140)
-                                        Image(systemName: "power")
-                                            .font(.system(size: 48, weight: .semibold))
-                                            .foregroundColor(.accentColor)
-                                    }
-                                }
-                                .padding(.top, 24)
-                                Text(lang.tr("vpn.disconnected"))
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            if let provisionError {
-                                Text(provisionError)
-                                    .font(.caption)
-                                    .foregroundColor(.red)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 20)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(24)
-                        .background(Color(uiColor: .systemBackground))
-                        .cornerRadius(24)
-                        .padding(.horizontal, 16)
-
-                        // Server Location Selector Card
-                        Button {
-                            showServerPickerSheet = true
-                        } label: {
-                            let s = currentDisplayServer
-                            HStack(spacing: 14) {
-                                Text(s.flag)
-                                    .font(.system(size: 30))
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(s.name)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-
-                                    Text("\(s.city ?? s.countryCode) · VLESS-Reality")
-                                        .font(.caption)
+                                    Text(lang.tr("vpn.disconnected"))
+                                        .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
 
-                                Spacer()
-
-                                HStack(spacing: 4) {
-                                    Text("Switch")
+                                if let provisionError {
+                                    Text(provisionError)
                                         .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.accentColor)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundColor(.accentColor)
+                                        .foregroundColor(.red)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 20)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.accentColor.opacity(0.12))
-                                .cornerRadius(8)
                             }
-                            .padding(16)
+                            .frame(maxWidth: .infinity)
+                            .padding(24)
                             .background(Color(uiColor: .systemBackground))
-                            .cornerRadius(20)
+                            .cornerRadius(24)
                             .padding(.horizontal, 16)
+
+                            // Server Location Selector Card
+                            Button {
+                                showServerPickerSheet = true
+                            } label: {
+                                let s = currentDisplayServer
+                                HStack(spacing: 14) {
+                                    Text(s.flag)
+                                        .font(.system(size: 30))
+
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(s.name)
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
+
+                                        Text("\(s.city ?? s.countryCode) · VLESS-Reality")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    HStack(spacing: 4) {
+                                        Text("Switch")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.accentColor)
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption2)
+                                            .foregroundColor(.accentColor)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.accentColor.opacity(0.12))
+                                    .cornerRadius(8)
+                                }
+                                .padding(16)
+                                .background(Color(uiColor: .systemBackground))
+                                .cornerRadius(20)
+                                .padding(.horizontal, 16)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .disabled(isProvisioning)
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .disabled(isProvisioning)
 
                         // Subscriptions Section
                         if let subs = meResult?.subscriptions, !subs.isEmpty {
@@ -191,7 +170,9 @@ public struct UserHomeView: View {
                                         .padding(.horizontal, 16)
                                 }
                             }
-                        } else if !isLoading {
+                        }
+
+                        if !hasActiveSubscription && !isLoading {
                             // No subscription empty state
                             VStack(spacing: 14) {
                                 Image(systemName: "shield.slash")
@@ -206,6 +187,20 @@ public struct UserHomeView: View {
                                     .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 20)
+
+                                Button {
+                                    showIAPSheet = true
+                                } label: {
+                                    Text(lang.tr("iap.subscriptions"))
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(Color.accentColor)
+                                        .cornerRadius(10)
+                                }
+                                .padding(.top, 4)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(24)
