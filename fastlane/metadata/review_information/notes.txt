@@ -15,7 +15,7 @@ Before any VPN tunnel is established and before any purchase controls are shown,
 
 3. IN-APP PURCHASES & SUBSCRIPTIONS (Guideline 3.1.1 & 3.1.2):
 All plans and services are now available as native auto-renewable Apple In-App Purchases (processed via RevenueCat). Subscriptions can be browsed and purchased natively within the app.
-- Available subscriptions: HushTunnel 1 Month, HushTunnel 3 Months, and HushTunnel 12 Months.
+- Available subscriptions: HushTunnel 1 Month (hushtunnel_1month), HushTunnel 3 Months (hushtunnel_3_months), HushTunnel 6 Months (hushtunnel_6_months), and HushTunnel Annual (hushtunnel_12_months).
 - "Restore Purchases" is prominently accessible in Account Settings.
 - "Manage App Store Subscription" links directly to the user's Apple ID subscription management page.
 - "Delete Account Permanently" is fully supported in Account Settings.

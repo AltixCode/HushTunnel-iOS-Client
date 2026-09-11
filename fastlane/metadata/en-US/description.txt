@@ -13,6 +13,7 @@ IN-APP PURCHASES & SUBSCRIPTIONS:
 HushTunnel offers flexible auto-renewable subscription plans for high-speed VPN traffic quotas:
 • HushTunnel 1 Month: 30 days of full VPN access
 • HushTunnel 3 Months: 90 days of full VPN access
+• HushTunnel 6 Months: 180 days of full VPN access
 • HushTunnel 12 Months: 365 days of full VPN access
 
 SUBSCRIPTION INFORMATION:

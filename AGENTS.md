@@ -1,8 +1,10 @@
 # HushTunnel iOS Client Guidelines
 
-## 1. Brand Identity
+## 1. Brand Identity & Master Guide
 - **Product Name**: Strictly **HushTunnel** (or **Hush Tunnel**), never with "VPN" appended.
-- **Bundle ID**: `io.nekohasekai.sfamt`.
+- **App Store Bundle ID**: `com.hushtunnel.ios` (App Store Connect ID: `6807551411`).
+- **Master Ecosystem Guide**: See `../AGENTS.md` for overall multi-repo architecture, RevenueCat mappings, and store procedures.
+- **In-App Subscriptions**: Powered by RevenueCat SDK 5.88.0 (`InAppPurchaseSheetView.swift` & `RevenueCatManager.swift`). StoreKit product IDs: `hushtunnel_1month` (1 month, $3), `hushtunnel_3_months` (3 months, $7), `hushtunnel_6_months` (6 months, $12), and `hushtunnel_12_months` (1 year, $20). Consumable wallet products: `hushtunnel_funds_5` through `hushtunnel_funds_100`.
 
 ## 2. Dependencies & Build Compatibility
 - Pinned `GRDB.swift` to `7.8.0` in `sing-box.xcodeproj` and `Package.resolved` for Swift 6.0/macOS 15 toolchain compatibility.
