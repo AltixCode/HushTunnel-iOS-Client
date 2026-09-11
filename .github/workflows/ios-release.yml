@@ -235,6 +235,7 @@ jobs:
           echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
 
       - name: Build & Export Signed App Store Package
+        run: |
           mkdir -p build/output
           mkdir -p build/DerivedData
 
