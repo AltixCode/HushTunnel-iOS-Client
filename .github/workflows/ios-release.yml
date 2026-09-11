@@ -328,7 +328,6 @@ jobs:
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
-              -derivedDataPath build/DerivedData \
               -exportOptionsPlist build/exportOptions.plist \
               -allowProvisioningUpdates \
               -authenticationKeyPath "$AUTH_KEY_PATH" \
@@ -339,7 +338,6 @@ jobs:
             xcodebuild -exportArchive \
               -archivePath build/HushTunnel.xcarchive \
               -exportPath build/output \
-              -derivedDataPath build/DerivedData \
               -exportOptionsPlist build/exportOptions.plist
           fi
 
