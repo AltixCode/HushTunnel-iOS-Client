@@ -71,6 +71,7 @@
 		3AF7B20C2FF10003000A0001 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
 		3AF7B20D2FF10003000A0001 /* ShareExtension.System.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3AF7B2022FF10003000A0001 /* ShareExtension.System.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3AFE19402EF5677100F61E06 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AC72A302EED94F60039DEA4 /* SystemConfiguration.framework */; };
+		6239C67130541C8D00F63644 /* StoreKitTestCertificate.cer in Resources */ = {isa = PBXBuildFile; fileRef = 6239C67030541C8D00F63644 /* StoreKitTestCertificate.cer */; };
 		9C37F17D2C131100001B9FA8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
 		9C37F17E2C131100001B9FA8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
 		9C37F17F2C131100001B9FA8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */; };
@@ -564,6 +565,8 @@
 		3AF7B0022FF10001000A0001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AF7B1022FF10002000A0001 /* ActionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ActionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AF7B2022FF10003000A0001 /* ShareExtension.System.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.System.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6239C66F30541C6400F63644 /* HushTunnel.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = HushTunnel.storekit; sourceTree = "<group>"; };
+		6239C67030541C8D00F63644 /* StoreKitTestCertificate.cer */ = {isa = PBXFileReference; lastKnownFileType = file; path = StoreKitTestCertificate.cer; sourceTree = "<group>"; };
 		9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -971,6 +974,8 @@
 		3AEC20BC2A45991900A63465 = {
 			isa = PBXGroup;
 			children = (
+				6239C66F30541C6400F63644 /* HushTunnel.storekit */,
+				6239C67030541C8D00F63644 /* StoreKitTestCertificate.cer */,
 				9C37F17C2C131100001B9FA8 /* Localizable.xcstrings */,
 				3AEC20DB2A4599D000A63465 /* Libbox.xcframework */,
 				3ADDCEB42E8B723B009ACE1D /* SFI */,
@@ -1781,6 +1786,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9C37F1822C131100001B9FA8 /* Localizable.xcstrings in Resources */,
+				6239C67130541C8D00F63644 /* StoreKitTestCertificate.cer in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
