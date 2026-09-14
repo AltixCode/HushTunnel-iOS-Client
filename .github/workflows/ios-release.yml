@@ -365,6 +365,8 @@ jobs:
           path: |
             build/output/*.ipa
             build/output/HushTunnel.ipa
+          # Release IPAs/AABs are large; the retention workflow keeps only the newest two.
+          retention-days: 14
 
       - name: Determine Release Tag
         id: tag_info
