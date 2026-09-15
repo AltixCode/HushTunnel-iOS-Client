@@ -46,40 +46,58 @@ jobs:
       - name: Select Xcode Version & Set Developer Directory
         run: |
           echo "Listing installed Xcode versions..."
-          ls -d /Applications/Xcode* || true
+          ls -d /Applications/Xcode* /Volumes/*/Applications/Xcode* 2>/dev/null || true
 
-          # Prefer the RELEASE Xcode, never a beta.
+          # Pick the first NON-BETA Xcode from a list of real candidate paths.
           #
-          # This block used to check /Applications/Xcode-beta.app first. On the
-          # runner that has one, every build was compiled with Xcode 27.0
-          # 27A5252f — a beta seed — and App Store Connect refuses those:
-          # "This build is using a beta version of Xcode and can't be
-          # submitted." Nothing failed at build time; the build uploaded,
-          # processed and appeared healthy, and only the submission was blocked.
-          if [ -d "/Applications/Xcode.app" ]; then
-            DEV_DIR="/Applications/Xcode.app/Contents/Developer"
-          else
-            DEV_DIR="$(xcode-select -p 2>/dev/null || echo '/Applications/Xcode.app/Contents/Developer')"
+          # Two things this has to survive, both seen on these runners:
+          #   1. The block used to prefer /Applications/Xcode-beta.app, so every
+          #      build was compiled with Xcode 27.0 27A5252f — a beta seed. App
+          #      Store Connect then refuses the submission ("This build is using
+          #      a beta version of Xcode"), and nothing fails until that point:
+          #      the archive signs, uploads, processes and shows as VALID.
+          #   2. The release Xcode lives on an external volume and is reached
+          #      through a symlink that the runner cannot always see, so keying
+          #      off a single path silently falls back to CommandLineTools,
+          #      which cannot build at all.
+          #
+          # Apple marks a build from the Xcode build number baked into it. Beta
+          # seeds carry a 5-prefixed patch field (27A5252f) where a release does
+          # not (27A266a), which is what `is_beta` tests.
+          is_beta() {
+            /usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$1/Contents/version.plist" 2>/dev/null \
+              | grep -Eq '^[0-9]+[A-Z]5[0-9]{3}'
+          }
+
+          DEV_DIR=""
+          for CANDIDATE in \
+            /Applications/Xcode.app \
+            /Volumes/ExtremePro/Applications/Xcode.app \
+            /Volumes/*/Applications/Xcode.app \
+            /Applications/Xcode_*.app
+          do
+            [ -x "$CANDIDATE/Contents/Developer/usr/bin/xcodebuild" ] || continue
+            BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$CANDIDATE/Contents/version.plist" 2>/dev/null)"
+            if is_beta "$CANDIDATE"; then
+              echo "Skipping $CANDIDATE — beta Xcode ($BUILD)"
+              continue
+            fi
+            echo "Found release Xcode: $CANDIDATE ($BUILD)"
+            DEV_DIR="$CANDIDATE/Contents/Developer"
+            break
+          done
+
+          if [ -z "$DEV_DIR" ]; then
+            echo "::error::No release Xcode on this runner. Only betas and/or CommandLineTools were found, and App Store Connect rejects anything built with a beta. Install the release Xcode here, or run this job on a runner that has one."
+            exit 1
           fi
 
           echo "Using Developer Directory: $DEV_DIR"
+          echo "DEVELOPER_DIR=$DEV_DIR" >> $GITHUB_ENV
           export DEVELOPER_DIR="$DEV_DIR"
 
           xcodebuild -version
 
-          # Fail here rather than three hours later at submission. Apple marks a
-          # build as beta-built from the Xcode build number baked into it, and
-          # beta seeds carry a 5-prefixed patch field (27A5252f) where a release
-          # does not (27A266a).
-          XCODE_BUILD="$(xcodebuild -version | awk '/Build version/ {print $3}')"
-          echo "Xcode build version: $XCODE_BUILD"
-          if echo "$XCODE_BUILD" | grep -Eq '^[0-9]+[A-Z]5[0-9]{3}'; then
-            echo "::error::$DEV_DIR is a BETA Xcode ($XCODE_BUILD). App Store Connect will reject any build made with it. Install the release Xcode on this runner, or run this job on a runner that has one."
-            exit 1
-          fi
-
-          echo "DEVELOPER_DIR=$DEV_DIR" >> $GITHUB_ENV
-          
           # Ensure iOS platform runtime/device support is present
           xcodebuild -downloadPlatform iOS 2>/dev/null || true
           
