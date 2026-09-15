@@ -108,7 +108,10 @@ jobs:
         run: |
           # 1. Prefer existing verified local Libbox.xcframework if available on runner host
           for LOCAL_PATH in "/Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework" "$HOME/Dev/vpn-ios-client/Libbox.xcframework" "/Users/ata/Dev/vpn-ios-client/Libbox.xcframework"; do
-            if [ -d "$LOCAL_PATH" ] && [ -f "$LOCAL_PATH/Info.plist" ]; then
+            # Same reason as below: require the Mach-O, not just Info.plist, or a
+            # stub gets copied over and the failure surfaces at link time.
+            if [ -f "$LOCAL_PATH/ios-arm64/Libbox.framework/Versions/A/Libbox" ] \
+               || [ -f "$LOCAL_PATH/ios-arm64/Libbox.framework/Libbox" ]; then
               echo "Found verified local Libbox.xcframework at $LOCAL_PATH - copying..."
               rm -rf ./Libbox.xcframework
               cp -r "$LOCAL_PATH" ./Libbox.xcframework
@@ -116,8 +119,15 @@ jobs:
             fi
           done
 
-          # 2. Build from pinned stable sing-box core (commit bdd86c1) if not present
-          if [ ! -d "Libbox.xcframework" ] || [ ! -f "Libbox.xcframework/Info.plist" ]; then
+          # 2. Build from pinned stable sing-box core (commit bdd86c1) if not usable.
+          #
+          # The test is for the BINARY, not for Info.plist. The copy committed to
+          # this repo is a headers-only stub: it has the directory layout and a
+          # valid Info.plist but no Mach-O inside, so an Info.plist check passes
+          # and the archive then dies at link time with
+          # "ld: framework 'Libbox' not found" — far from the actual cause.
+          LIBBOX_BIN="Libbox.xcframework/ios-arm64/Libbox.framework/Versions/A/Libbox"
+          if [ ! -f "$LIBBOX_BIN" ] && [ ! -f "Libbox.xcframework/ios-arm64/Libbox.framework/Libbox" ]; then
             echo "Building Libbox.xcframework from pinned stable sing-box core (commit bdd86c1)..."
             rm -rf /tmp/sing-box-source
             git clone https://github.com/sagernet/sing-box.git /tmp/sing-box-source
