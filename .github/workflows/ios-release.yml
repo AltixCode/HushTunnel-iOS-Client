@@ -45,62 +45,112 @@ jobs:
 
       - name: Select Xcode Version & Set Developer Directory
         run: |
-          echo "Listing installed Xcode versions..."
-          ls -d /Applications/Xcode* /Volumes/*/Applications/Xcode* 2>/dev/null || true
+          echo "Xcode installations visible to this runner:"
 
-          # Pick the first NON-BETA Xcode from a list of real candidate paths.
+          # Pick the NEWEST NON-BETA Xcode installed on this runner.
           #
-          # Two things this has to survive, both seen on these runners:
+          # Three failure modes this has to survive, all seen on these runners:
           #   1. The block used to prefer /Applications/Xcode-beta.app, so every
-          #      build was compiled with Xcode 27.0 27A5252f — a beta seed. App
+          #      build was compiled with Xcode 27.0 27A5252f - a beta seed. App
           #      Store Connect then refuses the submission ("This build is using
           #      a beta version of Xcode"), and nothing fails until that point:
           #      the archive signs, uploads, processes and shows as VALID.
           #   2. The release Xcode lives on an external volume and is reached
-          #      through a symlink that the runner cannot always see, so keying
-          #      off a single path silently falls back to CommandLineTools,
-          #      which cannot build at all.
+          #      through a symlink the runner cannot always see, so keying off a
+          #      single path silently falls back to CommandLineTools, which
+          #      cannot build at all.
+          #   3. A runner with several releases installed (26.6 alongside 27.0)
+          #      must use the highest: Apple requires the latest public SDK, so
+          #      "first non-beta found" is not good enough. We sort and take max.
           #
           # Apple marks a build from the Xcode build number baked into it. Beta
           # seeds carry a 5-prefixed patch field (27A5252f) where a release does
-          # not (27A266a), which is what `is_beta` tests.
+          # not (27A266a), which is what is_beta tests.
           is_beta() {
-            /usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$1/Contents/version.plist" 2>/dev/null \
-              | grep -Eq '^[0-9]+[A-Z]5[0-9]{3}'
+            printf '%s' "$1" | grep -Eq '^[0-9]+[A-Z]5[0-9]{3}'
           }
 
+          # Discover candidates broadly rather than from a hardcoded list: fixed
+          # paths, every mounted volume, and Spotlight by bundle identifier.
+          CAND_FILE="$(mktemp)"
+          RAW_FILE="$(mktemp)"
+          {
+            ls -d /Applications/Xcode*.app 2>/dev/null || true
+            ls -d "$HOME"/Applications/Xcode*.app 2>/dev/null || true
+            ls -d /Volumes/*/Applications/Xcode*.app 2>/dev/null || true
+            mdfind "kMDItemCFBundleIdentifier == 'com.apple.dt.Xcode'" 2>/dev/null || true
+          } > "$RAW_FILE"
+
+          # Resolve every hit to its physical path before de-duplicating. One
+          # Xcode is typically reachable three ways: /Applications/Xcode.app (a
+          # symlink to an external volume), the volume path itself, and again
+          # through the boot volume's self-symlink /Volumes/Macintosh HD.
+          # Without this the same app is scored repeatedly and an alias whose
+          # path contains a space can win, producing a DEVELOPER_DIR that breaks
+          # any downstream unquoted use.
+          while IFS= read -r RAW; do
+            [ -n "$RAW" ] || continue
+            REAL="$(cd "$RAW" 2>/dev/null && pwd -P)" || continue
+            [ -n "$REAL" ] && printf '%s\n' "$REAL"
+          done < "$RAW_FILE" | sort -u > "$CAND_FILE"
+          rm -f "$RAW_FILE"
+
+          BEST_VER=""
+          BEST_BUILD=""
           DEV_DIR=""
-          for CANDIDATE in \
-            /Applications/Xcode.app \
-            /Volumes/ExtremePro/Applications/Xcode.app \
-            /Volumes/*/Applications/Xcode.app \
-            /Applications/Xcode_*.app
-          do
+
+          # Redirect from a file, not a pipe: a piped while-loop runs in a
+          # subshell and the chosen path would not survive it.
+          while IFS= read -r CANDIDATE; do
+            [ -n "$CANDIDATE" ] || continue
             [ -x "$CANDIDATE/Contents/Developer/usr/bin/xcodebuild" ] || continue
-            BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$CANDIDATE/Contents/version.plist" 2>/dev/null)"
-            if is_beta "$CANDIDATE"; then
-              echo "Skipping $CANDIDATE — beta Xcode ($BUILD)"
+
+            BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$CANDIDATE/Contents/version.plist" 2>/dev/null || true)"
+            VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CANDIDATE/Contents/Info.plist" 2>/dev/null || true)"
+            [ -n "$BUILD" ] && [ -n "$VER" ] || continue
+
+            if is_beta "$BUILD"; then
+              echo "  skip   $CANDIDATE - beta seed ($VER $BUILD)"
               continue
             fi
-            echo "Found release Xcode: $CANDIDATE ($BUILD)"
-            DEV_DIR="$CANDIDATE/Contents/Developer"
-            break
-          done
+
+            echo "  usable $CANDIDATE - $VER $BUILD"
+            # Strictly greater, never equal: on a tie the first candidate is
+            # kept, so an equal-version duplicate cannot displace the one
+            # already chosen.
+            if [ -z "$BEST_VER" ] || { [ "$VER" != "$BEST_VER" ] \
+                 && [ "$(printf '%s\n%s\n' "$BEST_VER" "$VER" | sort -V | tail -1)" = "$VER" ]; }; then
+              BEST_VER="$VER"
+              BEST_BUILD="$BUILD"
+              DEV_DIR="$CANDIDATE/Contents/Developer"
+            fi
+          done < "$CAND_FILE"
+          rm -f "$CAND_FILE"
 
           if [ -z "$DEV_DIR" ]; then
-            echo "::error::No release Xcode on this runner. Only betas and/or CommandLineTools were found, and App Store Connect rejects anything built with a beta. Install the release Xcode here, or run this job on a runner that has one."
+            echo "::error::No release Xcode on this runner ($(hostname -s)). Only betas and/or CommandLineTools were found, and App Store Connect rejects anything built with a beta. A workflow can only choose among Xcodes already installed here - install the latest release Xcode on this machine, or route this job to a runner that has one."
             exit 1
           fi
 
-          echo "Using Developer Directory: $DEV_DIR"
+          echo "Selected Xcode $BEST_VER ($BEST_BUILD) at $DEV_DIR"
           echo "DEVELOPER_DIR=$DEV_DIR" >> $GITHUB_ENV
           export DEVELOPER_DIR="$DEV_DIR"
+
+          # Advisory only: warn when a newer public Xcode exists than the one we
+          # just picked. Apple requires the latest public SDK, but this must not
+          # fail a release on a transient network blip, so it never exits non-zero.
+          LATEST="$(curl -fsS --max-time 15 https://xcodereleases.com/data.json 2>/dev/null \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(r['version']['number'] for r in d if r['version'].get('release')))" 2>/dev/null || true)"
+          if [ -n "$LATEST" ] && [ "$LATEST" != "$BEST_VER" ] \
+             && [ "$(printf '%s\n%s\n' "$BEST_VER" "$LATEST" | sort -V | tail -1)" = "$LATEST" ]; then
+            echo "::warning::Building with Xcode $BEST_VER but $LATEST is the current public release. App Store Connect may reject this build for not using the latest SDK. Install Xcode $LATEST on $(hostname -s)."
+          fi
 
           xcodebuild -version
 
           # Ensure iOS platform runtime/device support is present
           xcodebuild -downloadPlatform iOS 2>/dev/null || true
-          
+
           # Output available destinations for verification
           xcodebuild -showdestinations -project sing-box.xcodeproj -scheme SFI || true
 
