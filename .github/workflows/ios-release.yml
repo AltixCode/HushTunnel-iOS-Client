@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
     inputs:
       upload_to_app_store:
-        description: 'Upload to TestFlight / App Store Connect'
+        description: 'Upload to TestFlight / App Store Connect (uploads by default)'
         required: false
         type: boolean
-        default: false
+        default: true
       release_tag:
         description: 'Release Tag (e.g. v1.0.0)'
         required: false
@@ -201,9 +201,23 @@ jobs:
       - name: Compute Dynamic Version
         run: |
           COMMIT_COUNT=$(git rev-list --count HEAD)
-          echo "Computed Version: 1.0.$COMMIT_COUNT (Build: $COMMIT_COUNT)"
+
+          # App Store Connect refuses an upload whose build number is not
+          # strictly higher than one it already holds ("The bundle version must
+          # be higher than the previously uploaded version"). The commit count
+          # alone is not enough: two runs of the SAME commit - a re-run, or a
+          # manual dispatch after a push - produce an identical number, and the
+          # second upload is rejected after a full archive has been built.
+          #
+          # Appending the run number fixes the ordering in both directions.
+          # CFBundleVersion accepts up to three dot-separated integers compared
+          # componentwise, so for a newer commit the first component rises, and
+          # within one commit the second does. Both cases strictly increase.
+          BUILD_NUMBER="$COMMIT_COUNT.${GITHUB_RUN_NUMBER:-1}"
+
+          echo "Computed Version: 1.0.$COMMIT_COUNT (Build: $BUILD_NUMBER)"
           echo "APP_MARKETING_VERSION=1.0.$COMMIT_COUNT" >> $GITHUB_ENV
-          echo "APP_BUILD_NUMBER=$COMMIT_COUNT" >> $GITHUB_ENV
+          echo "APP_BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
       - name: Setup Signing Keychain & App Store API Key
         id: keychain_setup
@@ -440,7 +454,12 @@ jobs:
           fi
 
       - name: Upload to App Store Connect / TestFlight
-        if: env.API_KEY_CONFIGURED == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
+        # Every successful build is uploaded. The ref allowlist that used to
+        # gate this silently skipped uploads from any other branch, and a
+        # workflow_dispatch defaulted to not uploading at all, so builds that
+        # looked green never reached TestFlight. The only gate left is whether
+        # the App Store Connect API key is actually configured.
+        if: env.API_KEY_CONFIGURED == 'true'
         run: |
           echo "Uploading IPA to App Store Connect / TestFlight via altool..."
           xcrun altool --upload-app \
