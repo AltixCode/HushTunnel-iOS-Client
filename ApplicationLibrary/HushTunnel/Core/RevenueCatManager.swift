@@ -54,28 +54,48 @@ public final class RevenueCatManager: ObservableObject {
             let subscriptions = Dictionary(uniqueKeysWithValues: config.subscriptionProducts.map { ($0.productId, $0) })
             let wallet = Dictionary(uniqueKeysWithValues: config.walletProducts.map { ($0.productId, $0) })
 
-            products = available.compactMap { package in
+            // RevenueCat returns `availablePackages` in the offering's own order,
+            // which is not the order a price ladder has to be read in: the live
+            // App Store screenshot shows 1 Month, 3 Months, 12 Months, 6 Months,
+            // and nobody can see that six months is better value per day than
+            // three when twelve is sitting between them.
+            //
+            // So sort explicitly. Subscriptions come first, shortest term first;
+            // wallet credit follows, smallest first. Sorting on the plan's own
+            // `durationDays` rather than on the price string is deliberate --
+            // `localizedPriceString` is text in the user's currency, and sorting
+            // storefront text produces a different order per region.
+            let ranked: [(rank: (Int, Int), product: IAPDisplayProduct)] = available.compactMap { package in
                 let id = package.storeProduct.productIdentifier.split(separator: ":", maxSplits: 1).first.map(String.init) ?? package.storeProduct.productIdentifier
                 if let product = subscriptions[id] {
-                    return IAPDisplayProduct(
-                        id: package.storeProduct.productIdentifier,
-                        title: package.storeProduct.localizedTitle,
-                        detail: String(format: LanguageManager.shared.tr("iap.subscriptionDays"), product.durationDays),
-                        price: package.storeProduct.localizedPriceString,
-                        kind: .subscription
+                    return (
+                        (0, product.durationDays),
+                        IAPDisplayProduct(
+                            id: package.storeProduct.productIdentifier,
+                            title: package.storeProduct.localizedTitle,
+                            detail: String(format: LanguageManager.shared.tr("iap.subscriptionDays"), product.durationDays),
+                            price: package.storeProduct.localizedPriceString,
+                            kind: .subscription
+                        )
                     )
                 }
                 if let product = wallet[id] {
-                    return IAPDisplayProduct(
-                        id: package.storeProduct.productIdentifier,
-                        title: package.storeProduct.localizedTitle,
-                        detail: String(format: LanguageManager.shared.tr("iap.walletCredit"), product.creditUsd),
-                        price: package.storeProduct.localizedPriceString,
-                        kind: .wallet
+                    return (
+                        (1, Int(product.creditUsd.rounded())),
+                        IAPDisplayProduct(
+                            id: package.storeProduct.productIdentifier,
+                            title: package.storeProduct.localizedTitle,
+                            detail: String(format: LanguageManager.shared.tr("iap.walletCredit"), product.creditUsd),
+                            price: package.storeProduct.localizedPriceString,
+                            kind: .wallet
+                        )
                     )
                 }
                 return nil
             }
+            products = ranked
+                .sorted { $0.rank < $1.rank }
+                .map(\.product)
         } catch {
             products = []
             packages = [:]

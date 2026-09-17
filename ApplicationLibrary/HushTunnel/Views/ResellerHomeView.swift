@@ -206,7 +206,7 @@ public struct ResellerHomeView: View {
                         Button {
                             showDebugLogs = true
                         } label: {
-                            Image(systemName: "ladybug")
+                            Image(systemName: "doc.text.magnifyingglass")
                         }
 
                         Button {
