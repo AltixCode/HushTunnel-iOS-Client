@@ -1,18 +1,25 @@
 # iOS Screenshots
-# App Store requirements:
-# - iPhone 6.5" Display (1284 x 2778)
-# - iPad 13" Display
+# App Store requirements, as of 2026:
+# - iPhone 6.9" Display (1320 x 2868)  -- mandatory for a new submission
+# - iPad 13"  Display (2064 x 2752)
 # Device names must match simulators that actually exist, or snapshot aborts
 # with "device not found" and produces nothing. Xcode 27 ships neither
 # "iPhone 12 Pro Max" nor "iPad Pro 13-inch (M4)", which is why the 13" iPad
 # set was never populated. Check with: xcrun simctl list devices available
+# Naming a device that EXISTS is not enough -- it has to BOOT. Five simulators
+# on this machine, including the two named here before, carry `isDeleted => true`
+# in their own device.plist while `simctl list devices available` still lists
+# them as Shutdown. Booting one returns SimError 404 "Unable to boot deleted
+# device", and snapshot does not stop: it prints "Device boot failed" in the
+# first twenty lines, builds the whole app and test bundle for several minutes,
+# then dies in a Ruby backtrace having produced nothing. Check a device with
+# `xcrun simctl boot <udid>` and confirm it reaches Booted before trusting it.
+#
+# These two are verified bootable and produce the two sizes the App Store
+# requires: 1320x2868 (6.9") and 2064x2752 (iPad 13").
 devices([
-  # iPhone 6.9" is MANDATORY for new App Store submissions; the live listing
-  # still carries a 6.5" set taken by hand, which is why it was never refreshed
-  # from this pipeline. "iPhone 18 Pro Max" is the 6.9" device present on this
-  # machine -- check with: xcrun simctl list devices available
-  "iPhone 18 Pro Max",
-  "iPad Pro 13-inch (M5)"
+  "AltixCode 6.9",
+  "QA iPad 13"
 ])
 
 languages([
