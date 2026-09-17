@@ -7,6 +7,11 @@
 # "iPhone 12 Pro Max" nor "iPad Pro 13-inch (M4)", which is why the 13" iPad
 # set was never populated. Check with: xcrun simctl list devices available
 devices([
+  # iPhone 6.9" is MANDATORY for new App Store submissions; the live listing
+  # still carries a 6.5" set taken by hand, which is why it was never refreshed
+  # from this pipeline. "iPhone 18 Pro Max" is the 6.9" device present on this
+  # machine -- check with: xcrun simctl list devices available
+  "iPhone 18 Pro Max",
   "iPad Pro 13-inch (M5)"
 ])
 
