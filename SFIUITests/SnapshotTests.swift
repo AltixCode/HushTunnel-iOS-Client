@@ -38,26 +38,39 @@ final class SnapshotTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // Start from no session at all. Without this the app opens on whatever
+        // account was signed in last, and a capture run here photographed the
+        // RESELLER dashboard -- prepaid balance, "Add wallet funds", "Add
+        // Customer", "Add Sub-Reseller". Those frames on a listing would show a
+        // distribution business a reviewer was never meant to see.
+        app.launchArguments += ["--reset-session", "--reset-vpn-disclosure", "-app_language", "en"]
         setupSnapshot(app)
         app.launch()
 
-        try signInIfNeeded()
+        try signIn()
         acceptDisclosureIfPresent()
 
-        // The connect button is the home screen's defining element. Waiting on
-        // it is what separates "the app is up" from "something is up".
-        let home = app.descendants(matching: .any)["hush.connect-toggle"]
+        // `hush.connect-toggle` is NOT enough: the reseller home carries one too,
+        // behind its "My VPN" tab, so waiting on it would pass on the wrong
+        // account's screen. `hush.iap.open` exists only in UserHomeView -- the
+        // reseller equivalent is `hush.iap.open-subscriptions` -- so it is the
+        // element that actually distinguishes the two.
+        let userHome = app.descendants(matching: .any)["hush.iap.open"]
         XCTAssertTrue(
-            home.waitForExistence(timeout: 40),
-            "never reached the home screen — refusing to photograph whatever is there instead"
+            userHome.waitForExistence(timeout: 40),
+            "never reached the USER home screen — refusing to photograph another account's interface"
         )
     }
 
-    private func signInIfNeeded() throws {
+    private func signIn() throws {
+        // Not "if needed". `--reset-session` guarantees the auth screen, so its
+        // absence is a failure, not a shortcut: silently skipping login is how
+        // the previous run ended up capturing a leftover account.
         let emailField = app.textFields["hush.auth.email"]
-        guard emailField.waitForExistence(timeout: 15) else {
-            return // already signed in from a previous test in the same run
-        }
+        XCTAssertTrue(
+            emailField.waitForExistence(timeout: 20),
+            "auth screen never appeared despite --reset-session — a session leaked in from somewhere"
+        )
         let environment = ProcessInfo.processInfo.environment
         guard let email = environment["HUSH_TEST_EMAIL"],
               let password = environment["HUSH_TEST_PASSWORD"]

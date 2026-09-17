@@ -22,6 +22,25 @@ public final class AuthStore: ObservableObject {
     }
 
     public func loadSession() {
+        // A capture run must start from a known account, not from whatever was
+        // signed in last. A store screenshot taken against a leftover session
+        // photographs that account's interface -- and one of the accounts here
+        // is a RESELLER, whose home screen is a prepaid balance, "Add wallet
+        // funds", "Add Customer" and "Add Sub-Reseller". Those frames on a
+        // listing would show a distribution business a reviewer was never meant
+        // to see, and would raise 3.1.1 rather than answer it.
+        if CommandLine.arguments.contains("--reset-session") {
+            let defaults = UserDefaults.standard
+            for key in [tokenKey, userIdKey, emailKey, roleKey] {
+                defaults.removeObject(forKey: key)
+            }
+            self.token = nil
+            self.userId = nil
+            self.email = nil
+            self.role = nil
+            self.isAuthenticated = false
+            return
+        }
         if CommandLine.arguments.contains("--mock-session") {
             self.token = "mock-token"
             self.userId = "mock-user"
