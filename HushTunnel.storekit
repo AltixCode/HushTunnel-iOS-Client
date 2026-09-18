@@ -14,6 +14,21 @@
   ],
   "products" : [
     {
+      "displayPrice" : "1.0",
+      "familyShareable" : false,
+      "internalID" : "1000000",
+      "localizations" : [
+        {
+          "description" : "$1 HushTunnel Wallet Credit",
+          "displayName" : "Add $1 Funds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "hushtunnel_funds_1",
+      "referenceName" : "HushTunnel Funds $1",
+      "type" : "Consumable"
+    },
+    {
       "displayPrice" : "5.0",
       "familyShareable" : false,
       "internalID" : "1000001",
