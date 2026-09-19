@@ -5,7 +5,7 @@ require "json"
 ENV["FASTLANE_XCODEBUILD_SETTINGS_RETRIES"] = "0"
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] = "120"
 
-BASE_PACKAGE_IDENTIFIER = File.read(File.expand_path("../sing-box.xcodeproj/project.pbxproj", __dir__))[/BASE_PACKAGE_IDENTIFIER = "?([^";]+)"?;/, 1].freeze
+BASE_PACKAGE_IDENTIFIER = File.read(File.expand_path("../HushTunnel.xcodeproj/project.pbxproj", __dir__))[/BASE_PACKAGE_IDENTIFIER = "?([^";]+)"?;/, 1].freeze
 
 SCREENSHOT_LANGUAGES = ["en-US", "zh-Hans"].freeze
 SCREENSHOT_LOCALES = {
@@ -70,7 +70,7 @@ platform :ios do
   desc "Build and upload iOS app to TestFlight"
   lane :beta do
     build_app(
-      project: "sing-box.xcodeproj",
+      project: "HushTunnel.xcodeproj",
       scheme: "SFI",
       export_method: "app-store",
       output_directory: "./build/output",
@@ -84,7 +84,7 @@ platform :ios do
   desc "Build and upload iOS app to App Store"
   lane :release do
     build_app(
-      project: "sing-box.xcodeproj",
+      project: "HushTunnel.xcodeproj",
       scheme: "SFI",
       export_method: "app-store",
       output_directory: "./build/output",
@@ -126,7 +126,7 @@ platform :mac do
       end
 
       run_tests(
-        project: "sing-box.xcodeproj",
+        project: "HushTunnel.xcodeproj",
         scheme: "SFM",
         destination: "platform=macOS",
         result_bundle: false,
@@ -304,7 +304,7 @@ platform :tvos do
       write_screenshot_language_files(screenshots_cache, language, locale)
 
       run_tests(
-        project: "sing-box.xcodeproj",
+        project: "HushTunnel.xcodeproj",
         scheme: "SFT",
         devices: ["Apple TV 4K Screenshot"],
         result_bundle: false,

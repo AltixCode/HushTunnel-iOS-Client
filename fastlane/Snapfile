@@ -32,7 +32,7 @@ languages([
 # "Could not retrieve response as fastlane runs in non-interactive mode".
 app_identifier("com.hushtunnel.ios")
 
-project("./sing-box.xcodeproj")
+project("./HushTunnel.xcodeproj")
 scheme("SFI")
 output_directory("./screenshots/ios")
 clear_previous_screenshots(true)

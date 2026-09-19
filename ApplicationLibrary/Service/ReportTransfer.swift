@@ -56,7 +56,7 @@ public struct ReportTransferError: LocalizedError {
 }
 
 public enum ReportTransferService {
-    public static let applicationServiceName = "sing-box:report-transfer"
+    public static let applicationServiceName = "hushtunnel:report-transfer"
     public static let fileChunkSize = 64 * 1024
 }
 

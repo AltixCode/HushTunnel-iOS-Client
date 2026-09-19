@@ -152,7 +152,7 @@ jobs:
           xcodebuild -downloadPlatform iOS 2>/dev/null || true
 
           # Output available destinations for verification
-          xcodebuild -showdestinations -project sing-box.xcodeproj -scheme SFI || true
+          xcodebuild -showdestinations -project HushTunnel.xcodeproj -scheme SFI || true
 
       - name: Setup Libbox.xcframework
         run: |
@@ -196,7 +196,7 @@ jobs:
 
       - name: Resolve Swift Package Dependencies
         run: |
-          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj -scheme SFI -derivedDataPath build/DerivedData
+          xcodebuild -resolvePackageDependencies -project HushTunnel.xcodeproj -scheme SFI -derivedDataPath build/DerivedData
 
       - name: Compute Dynamic Version
         run: |
@@ -374,7 +374,7 @@ jobs:
           if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
             echo "Archiving with automatic signing + App Store Connect API key (-allowProvisioningUpdates)..."
             xcodebuild archive \
-              -project sing-box.xcodeproj \
+              -project HushTunnel.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
               -derivedDataPath build/DerivedData \
@@ -391,7 +391,7 @@ jobs:
           else
             echo "No App Store Connect API key available - archiving with automatic signing against locally installed profiles/identities..."
             xcodebuild archive \
-              -project sing-box.xcodeproj \
+              -project HushTunnel.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
               -derivedDataPath build/DerivedData \

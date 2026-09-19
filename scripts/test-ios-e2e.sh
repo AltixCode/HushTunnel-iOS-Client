@@ -19,7 +19,7 @@ fi
 
 echo "▶ [1/5] Building iOS Simulator App..."
 DEVELOPER_DIR=$DEVELOPER_DIR xcodebuild build \
-  -project "$REPO_ROOT/sing-box.xcodeproj" \
+  -project "$REPO_ROOT/HushTunnel.xcodeproj" \
   -scheme SFI \
   -destination "$DESTINATION" \
   -derivedDataPath "$REPO_ROOT/build/DerivedData" \
@@ -50,7 +50,7 @@ echo " ✅ Captured VPN disclosure -> store_assets/03_vpn_disclosure.png"
 
 echo "▶ [5/5] Running Store Compliance UI Test..."
 DEVELOPER_DIR=$DEVELOPER_DIR PATH="$DEVELOPER_DIR/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin" xcodebuild test \
-  -project "$REPO_ROOT/sing-box.xcodeproj" \
+  -project "$REPO_ROOT/HushTunnel.xcodeproj" \
   -scheme SFI \
   -destination "$DESTINATION" \
   -parallel-testing-enabled NO \

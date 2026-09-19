@@ -8,7 +8,7 @@
 - **API Base URL**: `BrandConfig.apiBaseURL` (`ApplicationLibrary/HushTunnel/Core/BrandConfig.swift`) defaults to `https://www.hushtunnel.com` across all configurations (including Simulator and Debug). Can be overridden for local development using the environment variable `HUSH_API_BASE_URL`.
 
 ## 2. Dependencies & Build Compatibility
-- Pinned `GRDB.swift` to `7.8.0` in `sing-box.xcodeproj` and `Package.resolved` for Swift 6.0/macOS 15 toolchain compatibility.
+- Pinned `GRDB.swift` to `7.8.0` in `HushTunnel.xcodeproj` and `Package.resolved` for Swift 6.0/macOS 15 toolchain compatibility.
 - `Libbox.xcframework` is compiled automatically via `sagernet/gomobile` and cached in CI (`.github/workflows/ios-release.yml`).
 
 ## 3. Localization
@@ -21,7 +21,7 @@
   bash scripts/test-ios-e2e.sh
   ```
 - **Real build verification is available in this environment** — don't assume
-  otherwise. `xcodebuild -project sing-box.xcodeproj -scheme SFI -destination
+  otherwise. `xcodebuild -project HushTunnel.xcodeproj -scheme SFI -destination
   'generic/platform=iOS Simulator' build` (with
   `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer`) actually
   compiles the whole app and catches real errors; used to verify the
