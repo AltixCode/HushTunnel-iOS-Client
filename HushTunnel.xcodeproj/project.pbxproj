@@ -1663,7 +1663,6 @@
 				3AD0F1022FD1000100000003 /* XCRemoteSwiftPackageReference "LegacyBinaryCodable" */,
 				3A017F902A4AB2E4009149FA /* XCRemoteSwiftPackageReference "GRDB" */,
 				3A4A020B2B53E3DC004EFB87 /* XCRemoteSwiftPackageReference "qrcode" */,
-				3A2E87F92ED5ABCF00644195 /* XCLocalSwiftPackageReference "Frameworks/TreeSitterJSON5" */,
 				3ACE5E012EE1A91100644196 /* XCRemoteSwiftPackageReference "CodeEditSourceEditor" */,
 				3A4CA8CA2F75381F009C36CA /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				3A5AA1B82F7DB10900BA2A0D /* XCRemoteSwiftPackageReference "plcrashreporter" */,
@@ -4078,16 +4077,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Frameworks/Runestone;
-		};
-		3A2E87F92ED5ABCF00644195 /* XCLocalSwiftPackageReference "Frameworks/TreeSitterJSON5" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Frameworks/TreeSitterJSON5;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		3A017F902A4AB2E4009149FA /* XCRemoteSwiftPackageReference "GRDB" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -4168,13 +4157,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 3A017F902A4AB2E4009149FA /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
-		};
-			isa = XCSwiftPackageProductDependency;
-			productName = Runestone;
-		};
-			isa = XCSwiftPackageProductDependency;
-			package = 3A2E87F92ED5ABCF00644195 /* XCLocalSwiftPackageReference "Frameworks/TreeSitterJSON5" */;
-			productName = TreeSitterJSON5Runestone;
 		};
 		3A4A020C2B53E3DC004EFB87 /* QRCode */ = {
 			isa = XCSwiftPackageProductDependency;
