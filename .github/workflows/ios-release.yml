@@ -151,9 +151,6 @@ jobs:
           # Ensure iOS platform runtime/device support is present
           xcodebuild -downloadPlatform iOS 2>/dev/null || true
 
-          # Output available destinations for verification
-          xcodebuild -showdestinations -project HushTunnel.xcodeproj -scheme SFI || true
-
       - name: Setup Libbox.xcframework
         run: |
           # 1. Prefer existing verified local Libbox.xcframework if available on runner host
