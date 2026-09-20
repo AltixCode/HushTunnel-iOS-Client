@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: [self-hosted, macOS, ARM64, ios-signing]
 
     steps:
       - name: Checkout repository
@@ -227,17 +227,25 @@ jobs:
           DIST_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 || secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 || secrets.APPLE_CERTIFICATE_BASE64 }}
           DIST_P12_PASS: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD || secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          mkdir -p ~/.appstoreconnect/private_keys
+          mkdir -p ~/.appstoreconnect/private_keys ./private_keys
 
           # 1. Setup App Store Connect API Key (.p8)
           if [ -n "$API_KEY_DATA" ] && [ -n "$API_KEY_ID" ]; then
             echo "Setting up App Store Connect API Key: AuthKey_$API_KEY_ID.p8..."
+            DEST_HOME="$HOME/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8"
+            DEST_TEMP="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+            DEST_LOCAL="./private_keys/AuthKey_$API_KEY_ID.p8"
+
             if printf '%s' "$API_KEY_DATA" | grep -q "BEGIN PRIVATE KEY"; then
-              printf '%s\n' "$API_KEY_DATA" > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+              printf '%s\n' "$API_KEY_DATA" > "$DEST_HOME"
             else
-              printf '%s' "$API_KEY_DATA" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+              printf '%s' "$API_KEY_DATA" | base64 --decode > "$DEST_HOME"
             fi
-            chmod 600 ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+            cp -f "$DEST_HOME" "$DEST_TEMP"
+            cp -f "$DEST_HOME" "$DEST_LOCAL"
+            chmod 600 "$DEST_HOME" "$DEST_TEMP" "$DEST_LOCAL"
+
+            echo "API_PRIVATE_KEYS_DIR=$RUNNER_TEMP" >> $GITHUB_ENV
             echo "API_KEY_CONFIGURED=true" >> $GITHUB_ENV
           else
             echo "API_KEY_CONFIGURED=false" >> $GITHUB_ENV
@@ -466,6 +474,10 @@ jobs:
             --apiIssuer "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
 
       - name: Upload Artifacts
+        # actions/upload-artifact@v4 requires GitHub.com artifact API which Forgejo
+        # (GHES) does not implement. Without this guard the job fails on Forgejo even
+        # though the IPA was already successfully uploaded to TestFlight in the step above.
+        if: github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
         with:
           name: HushTunnel-iOS-IPA
@@ -476,6 +488,8 @@ jobs:
 
       - name: Determine Release Tag
         id: tag_info
+        # GitHub release steps below only work on GitHub.com, not Forgejo.
+        if: github.server_url == 'https://github.com'
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
             TAG_NAME="${{ inputs.release_tag }}"
@@ -487,6 +501,7 @@ jobs:
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
       - name: Generate Dynamic Release Notes
+        if: github.server_url == 'https://github.com'
         run: |
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           TAG="${{ steps.tag_info.outputs.TAG_NAME }}"
@@ -531,7 +546,7 @@ jobs:
           sed -i '' "s/\${VERSION}/$VERSION/g" RELEASE_NOTES.md
 
       - name: Publish GitHub Release
-        if: success()
+        if: github.server_url == 'https://github.com' && success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag_info.outputs.TAG_NAME }}
