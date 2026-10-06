@@ -1,3 +1,5 @@
+#if os(macOS)
+
 import Darwin
 import Foundation
 import Libbox
@@ -191,3 +193,5 @@ private struct GitHubAsset: Decodable {
         case size
     }
 }
+
+#endif

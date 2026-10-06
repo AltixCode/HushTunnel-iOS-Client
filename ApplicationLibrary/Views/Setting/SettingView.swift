@@ -189,8 +189,13 @@ public struct SettingView: View {
             }
             #if !os(tvOS)
                 Section("About") {
+                    RequestReviewButton {
+                        Label("Rate on the App Store", systemImage: "text.bubble.fill")
+                    }
+                }
+                Section("Open Source Acknowledgements") {
                     Link(destination: URL(string: String(localized: "https://sing-box.sagernet.org/"))!) {
-                        Label("Documentation", systemImage: "doc.on.doc.fill")
+                        Label("sing-box Engine Documentation", systemImage: "doc.on.doc.fill")
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
@@ -203,7 +208,7 @@ public struct SettingView: View {
                         }
                     }
                     Link(destination: URL(string: String("https://github.com/SagerNet/sing-box"))!) {
-                        Label("Source Code", systemImage: "pills.fill")
+                        Label("sing-box Engine Source (GPLv3)", systemImage: "pills.fill")
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(.accentColor)
@@ -211,9 +216,6 @@ public struct SettingView: View {
                         Link(destination: URL(string: String("https://github.com/SagerNet/sing-box/releases"))!) {
                             Text("Releases")
                         }
-                    }
-                    RequestReviewButton {
-                        Label("Rate on the App Store", systemImage: "text.bubble.fill")
                     }
                     #if os(macOS)
                         if Variant.useSystemExtension {

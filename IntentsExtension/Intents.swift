@@ -4,13 +4,13 @@ import Library
 
 @available(iOS 16.0, macOS 13.0, *)
 struct StartServiceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Start sing-box"
+    static var title: LocalizedStringResource = "Start HushTunnel"
 
     static var description =
-        IntentDescription("Start or reload sing-box service with specified profile")
+        IntentDescription("Start or reload HushTunnel service with specified profile")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Start sing-box service with profile \(\.$profile).")
+        Summary("Start HushTunnel service with profile \(\.$profile).")
     }
 
     @Parameter(title: "Profile", optionsProvider: ProfileProvider())
@@ -48,13 +48,13 @@ struct StartServiceIntent: AppIntent {
 
 @available(iOS 16.0, macOS 13.0, *)
 struct RestartServiceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Restart sing-box"
+    static var title: LocalizedStringResource = "Restart HushTunnel"
 
     static var description =
-        IntentDescription("Restart sing-box service")
+        IntentDescription("Restart HushTunnel service")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Restart sing-box service")
+        Summary("Restart HushTunnel service")
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
@@ -74,13 +74,13 @@ struct RestartServiceIntent: AppIntent {
 
 @available(iOS 16.0, macOS 13.0, *)
 struct StopServiceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Stop sing-box"
+    static var title: LocalizedStringResource = "Stop HushTunnel"
 
     static var description =
-        IntentDescription("Stop sing-box service")
+        IntentDescription("Stop HushTunnel service")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Stop sing-box service")
+        Summary("Stop HushTunnel service")
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
@@ -94,13 +94,13 @@ struct StopServiceIntent: AppIntent {
 
 @available(iOS 16.0, macOS 13.0, *)
 struct ToggleServiceIntent: AppIntent {
-    static var title: LocalizedStringResource = "Toggle sing-box"
+    static var title: LocalizedStringResource = "Toggle HushTunnel"
 
     static var description =
-        IntentDescription("Toggle sing-box service")
+        IntentDescription("Toggle HushTunnel service")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Toggle sing-box service")
+        Summary("Toggle HushTunnel service")
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
@@ -120,13 +120,13 @@ struct ToggleServiceIntent: AppIntent {
 
 @available(iOS 16.0, macOS 13.0, *)
 struct GetServiceStatus: AppIntent {
-    static var title: LocalizedStringResource = "Get is sing-box service started"
+    static var title: LocalizedStringResource = "Get is HushTunnel service started"
 
     static var description =
-        IntentDescription("Get is sing-box service started")
+        IntentDescription("Get is HushTunnel service started")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Get is sing-box service started")
+        Summary("Get is HushTunnel service started")
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<Bool> {
@@ -139,13 +139,13 @@ struct GetServiceStatus: AppIntent {
 
 @available(iOS 16.0, macOS 13.0, *)
 struct GetCurrentProfile: AppIntent {
-    static var title: LocalizedStringResource = "Get current sing-box profile"
+    static var title: LocalizedStringResource = "Get current HushTunnel profile"
 
     static var description =
-        IntentDescription("Get current sing-box profile")
+        IntentDescription("Get current HushTunnel profile")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Get current sing-box profile")
+        Summary("Get current HushTunnel profile")
     }
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
@@ -158,13 +158,13 @@ struct GetCurrentProfile: AppIntent {
 
 @available(iOS 16.0, macOS 13.0, *)
 struct UpdateProfileIntent: AppIntent {
-    static var title: LocalizedStringResource = "Update sing-box profile"
+    static var title: LocalizedStringResource = "Update HushTunnel profile"
 
     static var description =
-        IntentDescription("Update specified sing-box profile")
+        IntentDescription("Update specified HushTunnel profile")
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Update sing-box profile \(\.$profile).")
+        Summary("Update HushTunnel profile \(\.$profile).")
     }
 
     @Parameter(title: "Profile", optionsProvider: RemoteProfileProvider())

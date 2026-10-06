@@ -33,7 +33,7 @@
                         Section {
                             EmptyView()
                         } footer: {
-                            Text("To export this report to your iPhone or iPad, make sure sing-box is the **same version** on both devices and **VPN is disabled**.")
+                            Text("To export this report to your iPhone or iPad, make sure HushTunnel is the **same version** on both devices and **VPN is disabled**.")
                         }
 
                         DevicePicker(

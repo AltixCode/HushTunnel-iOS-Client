@@ -334,7 +334,7 @@ public class ExtensionProfile: ObservableObject {
         } else {
             tunnelProtocol.providerBundleIdentifier = AppConfiguration.extensionBundleID
         }
-        tunnelProtocol.serverAddress = "sing-box"
+        tunnelProtocol.serverAddress = "HushTunnel"
         manager.protocolConfiguration = tunnelProtocol
         manager.isEnabled = true
         try await manager.saveToPreferences()
