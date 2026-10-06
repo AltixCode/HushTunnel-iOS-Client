@@ -45,7 +45,7 @@ class FileProviderItem: NSObject, NSFileProviderItem {
 
     var filename: String {
         if isRoot {
-            return "sing-box"
+            return "HushTunnel"
         }
         return url.lastPathComponent
     }

@@ -24,11 +24,11 @@
                         Section {
                             EmptyView()
                         } footer: {
-                            Text("To import configurations from your iPhone or iPad, make sure sing-box is the **same version** on both devices and **VPN is disabled**.")
+                            Text("To import configurations from your iPhone or iPad, make sure HushTunnel is the **same version** on both devices and **VPN is disabled**.")
                         }
 
                         DevicePicker(
-                            .applicationService(name: "sing-box:profile")
+                            .applicationService(name: "hushtunnel:profile")
                         ) { endpoint in
                             viewModel.selected = true
                             Task {
