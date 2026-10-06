@@ -156,6 +156,7 @@ public struct UserHomeView: View {
                             }
                             .buttonStyle(PlainButtonStyle())
                             .disabled(isProvisioning)
+                            .accessibilityIdentifier("hush.server-switch-open")
                         }
 
                         // Subscriptions Section

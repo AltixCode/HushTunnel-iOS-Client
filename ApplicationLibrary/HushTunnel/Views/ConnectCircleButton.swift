@@ -249,5 +249,23 @@ public struct ConnectStatusLabel: View {
                 .fontWeight(.medium)
                 .foregroundColor(.secondary)
         }
+        // Locale-independent raw status for UI testing — the Text above is
+        // localized (lang.tr), which UI tests shouldn't have to pattern-match
+        // against. Mirrors NEVPNStatus's own case names directly.
+        .accessibilityIdentifier("hush.status-label")
+        .accessibilityValue(rawStatusValue)
+    }
+
+    private var rawStatusValue: String {
+        if isProvisioning { return "provisioning" }
+        switch profile.status {
+        case .connected: "connected"
+        case .connecting: "connecting"
+        case .reasserting: "reasserting"
+        case .disconnecting: "disconnecting"
+        case .disconnected: "disconnected"
+        case .invalid: "invalid"
+        @unknown default: "unknown"
+        }
     }
 }
