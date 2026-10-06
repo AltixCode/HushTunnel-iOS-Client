@@ -1,19 +1,30 @@
 import Foundation
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 import Library
 
-/// Bridges the backend's subscription into sing-box's real remote-profile
-/// pipeline, so the user never sees a profile list or "add profile" screen —
-/// this runs invisibly after login/order, then the real `ExtensionProfile`
-/// (NetworkExtension) is used to actually connect. Mirrors the Android fork's
-/// `ProvisionHelper.provisionSubscription`.
+/// Bridges the backend's subscription into the active engine's real
+/// remote-profile pipeline, so the user never sees a profile list or "add
+/// profile" screen — this runs invisibly after login/order, then the real
+/// `ExtensionProfile` (NetworkExtension) is used to actually connect.
+/// Mirrors the Android fork's `ProvisionHelper.provisionSubscription`.
 ///
-/// The backend's default subscription format (base64 vless:// links, for
-/// v2ray-family clients like Android's v2rayNG) is not something sing-box's
-/// `LibboxCheckConfig` can parse — it needs a complete sing-box config
-/// document. `?format=sing-box` on the same subscription URL returns exactly
-/// that (see `buildSingBoxConfig` in the vpn-billing-dashboard web repo,
-/// schema-verified against the real `sing-box check` CLI).
+/// iOS and macOS/tvOS fetch different representations of the same
+/// subscription, because they run different tunnel engines:
+///
+/// - macOS/tvOS (SFM/SFT) still run sing-box (`Library/Network/ExtensionProvider.swift`,
+///   unchanged), which needs a complete sing-box config document — the
+///   backend's `?format=sing-box` query param on the same subscription URL
+///   returns exactly that (see `buildSingBoxConfig` in the
+///   HushTunnel-Billing-Dashboard web repo), validated here via
+///   `LibboxCheckConfig`.
+/// - iOS (SFI) runs xray-core + hev-socks5-tunnel instead (GPLv3 sing-box
+///   replaced with MPL-2.0/MIT engines for App Store distribution — see
+///   `Extension/PacketTunnelProvider.swift`), which consumes the backend's
+///   *default* subscription format directly: a single plain `vless://` link
+///   (the same format HushTunnel's own Android client, and most v2ray-family
+///   clients, already consume) — no `?format=sing-box`, no `LibboxCheckConfig`.
 public enum ProvisionHelper {
     public static let profileName = "HushTunnel"
 
@@ -28,7 +39,11 @@ public enum ProvisionHelper {
         preferredServerId: String? = nil,
         reloadRunningProfile: Bool = true
     ) async throws {
-        var baseRemoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "sing-box")
+        #if os(iOS)
+            var baseRemoteURL = URL(string: subscriptionUrl)
+        #else
+            var baseRemoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "sing-box")
+        #endif
         if let preferred = preferredServerId, !preferred.isEmpty {
             baseRemoteURL = baseRemoteURL?.appendingQueryItem(name: "server", value: preferred)
         }
@@ -41,13 +56,22 @@ public enum ProvisionHelper {
         // leave the UI pointing at one server while the config file still
         // contains the previously selected server.
         let remoteContent = try await HTTPClient.getStringAsync(remoteURL.absoluteString)
-        try await BlockingIO.run {
-            var error: NSError?
-            LibboxCheckConfig(remoteContent, &error)
-            if let error {
-                throw error
+        #if os(iOS)
+            let trimmed = remoteContent.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("vless://"), URL(string: trimmed) != nil else {
+                throw NSError(domain: "ProvisionHelper", code: 0, userInfo: [
+                    NSLocalizedDescriptionKey: "Subscription did not return a valid vless:// link",
+                ])
             }
-        }
+        #else
+            try await BlockingIO.run {
+                var error: NSError?
+                LibboxCheckConfig(remoteContent, &error)
+                if let error {
+                    throw error
+                }
+            }
+        #endif
 
         if let existing = try await ProfileManager.get(by: profileName) {
             existing.remoteURL = remoteURL.absoluteString

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		17493EC31519EFABE7E8A00F /* HevSocks5Tunnel.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52B76E8AAA60D0F47404B3DA /* HevSocks5Tunnel.xcframework */; };
 		F7C3183067476D5501D5BBFC /* XrayMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = EE0AAF11B58DCD25E39D9CEE /* XrayMobile.xcframework */; };
+		5B2C9F104E6A5C1D9A8F0012 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AC6CFB92FC07A7500F5B0AE /* libresolv.tbd */; };
 		3A017F922A4AB2E4009149FA /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 3A017F912A4AB2E4009149FA /* GRDB */; };
 		3A096F8F2A4ED3DE00D4A2ED /* Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3A096F862A4ED3DE00D4A2ED /* Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3A3AA7FC2A4EFDAE002F78AB /* Library.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC211D2A459B4700A63465 /* Library.framework */; };
@@ -779,6 +780,7 @@
 				3A648D542A4EF4C700D95A12 /* NetworkExtension.framework in Frameworks */,
 				F7C3183067476D5501D5BBFC /* XrayMobile.xcframework in Frameworks */,
 				17493EC31519EFABE7E8A00F /* HevSocks5Tunnel.xcframework in Frameworks */,
+				5B2C9F104E6A5C1D9A8F0012 /* libresolv.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

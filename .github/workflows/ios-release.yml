@@ -191,6 +191,36 @@ jobs:
           
           echo "Libbox.xcframework setup complete."
 
+      - name: Setup XrayMobile.xcframework and HevSocks5Tunnel.xcframework
+        run: |
+          # Built from this repo's own XrayMobile/ (Go wrapper around
+          # xtls/xray-core, MPL-2.0) and the hev-socks5-tunnel submodule
+          # (MIT) — the iOS-only replacement for sing-box's GPLv3 engine.
+          # Same not-just-Info.plist verification pattern as Libbox above.
+          XRAY_BIN="XrayMobile.xcframework/ios-arm64/XrayMobile.framework/XrayMobile"
+          if [ ! -f "$XRAY_BIN" ]; then
+            echo "Building XrayMobile.xcframework via gomobile bind..."
+            export PATH=$(go env GOPATH)/bin:$PATH
+            go install golang.org/x/mobile/cmd/gomobile@latest
+            pushd XrayMobile
+            go get -tool golang.org/x/mobile/cmd/gobind
+            gomobile init
+            gomobile bind -target=ios -o ../XrayMobile.xcframework .
+            popd
+          fi
+
+          HEV_BIN="HevSocks5Tunnel.xcframework/ios-arm64/libhev-socks5-tunnel.a"
+          if [ ! -f "$HEV_BIN" ]; then
+            echo "Building HevSocks5Tunnel.xcframework via build-apple.sh..."
+            git submodule update --init --recursive third_party/hev-socks5-tunnel
+            pushd third_party/hev-socks5-tunnel
+            ./build-apple.sh
+            popd
+            cp -r third_party/hev-socks5-tunnel/HevSocks5Tunnel.xcframework ./HevSocks5Tunnel.xcframework
+          fi
+
+          echo "XrayMobile.xcframework and HevSocks5Tunnel.xcframework setup complete."
+
       - name: Resolve Swift Package Dependencies
         run: |
           xcodebuild -resolvePackageDependencies -project HushTunnel.xcodeproj -scheme SFI -derivedDataPath build/DerivedData
