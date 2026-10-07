@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
     inputs:
       upload_to_app_store:
-        description: 'Upload to TestFlight / App Store Connect'
+        description: 'Upload to TestFlight / App Store Connect (uploads by default)'
         required: false
         type: boolean
-        default: false
+        default: true
       release_tag:
         description: 'Release Tag (e.g. v1.0.0)'
         required: false
@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: [self-hosted, macOS, ARM64, ios-signing]
 
     steps:
       - name: Checkout repository
@@ -45,39 +45,120 @@ jobs:
 
       - name: Select Xcode Version & Set Developer Directory
         run: |
-          echo "Listing installed Xcode versions..."
-          ls -d /Applications/Xcode* || true
-          
-          # Detect installed Xcode paths
-          if [ -d "/Applications/Xcode-beta.app" ]; then
-            DEV_DIR="/Applications/Xcode-beta.app/Contents/Developer"
-          elif [ -d "/Applications/Xcode_16.1.app" ]; then
-            DEV_DIR="/Applications/Xcode_16.1.app/Contents/Developer"
-          elif [ -d "/Applications/Xcode_16.0.app" ]; then
-            DEV_DIR="/Applications/Xcode_16.0.app/Contents/Developer"
-          elif [ -d "/Applications/Xcode.app" ]; then
-            DEV_DIR="/Applications/Xcode.app/Contents/Developer"
-          else
-            DEV_DIR="$(xcode-select -p 2>/dev/null || echo '/Applications/Xcode.app/Contents/Developer')"
+          echo "Xcode installations visible to this runner:"
+
+          # Pick the NEWEST NON-BETA Xcode installed on this runner.
+          #
+          # Three failure modes this has to survive, all seen on these runners:
+          #   1. The block used to prefer /Applications/Xcode-beta.app, so every
+          #      build was compiled with Xcode 27.0 27A5252f - a beta seed. App
+          #      Store Connect then refuses the submission ("This build is using
+          #      a beta version of Xcode"), and nothing fails until that point:
+          #      the archive signs, uploads, processes and shows as VALID.
+          #   2. The release Xcode lives on an external volume and is reached
+          #      through a symlink the runner cannot always see, so keying off a
+          #      single path silently falls back to CommandLineTools, which
+          #      cannot build at all.
+          #   3. A runner with several releases installed (26.6 alongside 27.0)
+          #      must use the highest: Apple requires the latest public SDK, so
+          #      "first non-beta found" is not good enough. We sort and take max.
+          #
+          # Apple marks a build from the Xcode build number baked into it. Beta
+          # seeds carry a 5-prefixed patch field (27A5252f) where a release does
+          # not (27A266a), which is what is_beta tests.
+          is_beta() {
+            printf '%s' "$1" | grep -Eq '^[0-9]+[A-Z]5[0-9]{3}'
+          }
+
+          # Discover candidates broadly rather than from a hardcoded list: fixed
+          # paths, every mounted volume, and Spotlight by bundle identifier.
+          CAND_FILE="$(mktemp)"
+          RAW_FILE="$(mktemp)"
+          {
+            ls -d /Applications/Xcode*.app 2>/dev/null || true
+            ls -d "$HOME"/Applications/Xcode*.app 2>/dev/null || true
+            ls -d /Volumes/*/Applications/Xcode*.app 2>/dev/null || true
+            mdfind "kMDItemCFBundleIdentifier == 'com.apple.dt.Xcode'" 2>/dev/null || true
+          } > "$RAW_FILE"
+
+          # Resolve every hit to its physical path before de-duplicating. One
+          # Xcode is typically reachable three ways: /Applications/Xcode.app (a
+          # symlink to an external volume), the volume path itself, and again
+          # through the boot volume's self-symlink /Volumes/Macintosh HD.
+          # Without this the same app is scored repeatedly and an alias whose
+          # path contains a space can win, producing a DEVELOPER_DIR that breaks
+          # any downstream unquoted use.
+          while IFS= read -r RAW; do
+            [ -n "$RAW" ] || continue
+            REAL="$(cd "$RAW" 2>/dev/null && pwd -P)" || continue
+            [ -n "$REAL" ] && printf '%s\n' "$REAL"
+          done < "$RAW_FILE" | sort -u > "$CAND_FILE"
+          rm -f "$RAW_FILE"
+
+          BEST_VER=""
+          BEST_BUILD=""
+          DEV_DIR=""
+
+          # Redirect from a file, not a pipe: a piped while-loop runs in a
+          # subshell and the chosen path would not survive it.
+          while IFS= read -r CANDIDATE; do
+            [ -n "$CANDIDATE" ] || continue
+            [ -x "$CANDIDATE/Contents/Developer/usr/bin/xcodebuild" ] || continue
+
+            BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$CANDIDATE/Contents/version.plist" 2>/dev/null || true)"
+            VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CANDIDATE/Contents/Info.plist" 2>/dev/null || true)"
+            [ -n "$BUILD" ] && [ -n "$VER" ] || continue
+
+            if is_beta "$BUILD"; then
+              echo "  skip   $CANDIDATE - beta seed ($VER $BUILD)"
+              continue
+            fi
+
+            echo "  usable $CANDIDATE - $VER $BUILD"
+            # Strictly greater, never equal: on a tie the first candidate is
+            # kept, so an equal-version duplicate cannot displace the one
+            # already chosen.
+            if [ -z "$BEST_VER" ] || { [ "$VER" != "$BEST_VER" ] \
+                 && [ "$(printf '%s\n%s\n' "$BEST_VER" "$VER" | sort -V | tail -1)" = "$VER" ]; }; then
+              BEST_VER="$VER"
+              BEST_BUILD="$BUILD"
+              DEV_DIR="$CANDIDATE/Contents/Developer"
+            fi
+          done < "$CAND_FILE"
+          rm -f "$CAND_FILE"
+
+          if [ -z "$DEV_DIR" ]; then
+            echo "::error::No release Xcode on this runner ($(hostname -s)). Only betas and/or CommandLineTools were found, and App Store Connect rejects anything built with a beta. A workflow can only choose among Xcodes already installed here - install the latest release Xcode on this machine, or route this job to a runner that has one."
+            exit 1
           fi
-          
-          echo "Using Developer Directory: $DEV_DIR"
+
+          echo "Selected Xcode $BEST_VER ($BEST_BUILD) at $DEV_DIR"
           echo "DEVELOPER_DIR=$DEV_DIR" >> $GITHUB_ENV
           export DEVELOPER_DIR="$DEV_DIR"
-          
+
+          # Advisory only: warn when a newer public Xcode exists than the one we
+          # just picked. Apple requires the latest public SDK, but this must not
+          # fail a release on a transient network blip, so it never exits non-zero.
+          LATEST="$(curl -fsS --max-time 15 https://xcodereleases.com/data.json 2>/dev/null \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(r['version']['number'] for r in d if r['version'].get('release')))" 2>/dev/null || true)"
+          if [ -n "$LATEST" ] && [ "$LATEST" != "$BEST_VER" ] \
+             && [ "$(printf '%s\n%s\n' "$BEST_VER" "$LATEST" | sort -V | tail -1)" = "$LATEST" ]; then
+            echo "::warning::Building with Xcode $BEST_VER but $LATEST is the current public release. App Store Connect may reject this build for not using the latest SDK. Install Xcode $LATEST on $(hostname -s)."
+          fi
+
           xcodebuild -version
-          
+
           # Ensure iOS platform runtime/device support is present
           xcodebuild -downloadPlatform iOS 2>/dev/null || true
-          
-          # Output available destinations for verification
-          xcodebuild -showdestinations -project sing-box.xcodeproj -scheme SFI || true
 
       - name: Setup Libbox.xcframework
         run: |
           # 1. Prefer existing verified local Libbox.xcframework if available on runner host
           for LOCAL_PATH in "/Users/atamohammadi/Dev/vpn-ios-client/Libbox.xcframework" "$HOME/Dev/vpn-ios-client/Libbox.xcframework" "/Users/ata/Dev/vpn-ios-client/Libbox.xcframework"; do
-            if [ -d "$LOCAL_PATH" ] && [ -f "$LOCAL_PATH/Info.plist" ]; then
+            # Same reason as below: require the Mach-O, not just Info.plist, or a
+            # stub gets copied over and the failure surfaces at link time.
+            if [ -f "$LOCAL_PATH/ios-arm64/Libbox.framework/Versions/A/Libbox" ] \
+               || [ -f "$LOCAL_PATH/ios-arm64/Libbox.framework/Libbox" ]; then
               echo "Found verified local Libbox.xcframework at $LOCAL_PATH - copying..."
               rm -rf ./Libbox.xcframework
               cp -r "$LOCAL_PATH" ./Libbox.xcframework
@@ -85,8 +166,15 @@ jobs:
             fi
           done
 
-          # 2. Build from pinned stable sing-box core (commit bdd86c1) if not present
-          if [ ! -d "Libbox.xcframework" ] || [ ! -f "Libbox.xcframework/Info.plist" ]; then
+          # 2. Build from pinned stable sing-box core (commit bdd86c1) if not usable.
+          #
+          # The test is for the BINARY, not for Info.plist. The copy committed to
+          # this repo is a headers-only stub: it has the directory layout and a
+          # valid Info.plist but no Mach-O inside, so an Info.plist check passes
+          # and the archive then dies at link time with
+          # "ld: framework 'Libbox' not found" — far from the actual cause.
+          LIBBOX_BIN="Libbox.xcframework/ios-arm64/Libbox.framework/Versions/A/Libbox"
+          if [ ! -f "$LIBBOX_BIN" ] && [ ! -f "Libbox.xcframework/ios-arm64/Libbox.framework/Libbox" ]; then
             echo "Building Libbox.xcframework from pinned stable sing-box core (commit bdd86c1)..."
             rm -rf /tmp/sing-box-source
             git clone https://github.com/sagernet/sing-box.git /tmp/sing-box-source
@@ -103,113 +191,211 @@ jobs:
           
           echo "Libbox.xcframework setup complete."
 
+      - name: Setup XrayMobile.xcframework and HevSocks5Tunnel.xcframework
+        run: |
+          # Built from this repo's own XrayMobile/ (Go wrapper around
+          # xtls/xray-core, MPL-2.0) and the hev-socks5-tunnel submodule
+          # (MIT) — the iOS-only replacement for sing-box's GPLv3 engine.
+          # Same not-just-Info.plist verification pattern as Libbox above.
+          XRAY_BIN="XrayMobile.xcframework/ios-arm64/XrayMobile.framework/XrayMobile"
+          if [ ! -f "$XRAY_BIN" ]; then
+            echo "Building XrayMobile.xcframework via gomobile bind..."
+            export PATH=$(go env GOPATH)/bin:$PATH
+            go install golang.org/x/mobile/cmd/gomobile@latest
+            pushd XrayMobile
+            go get -tool golang.org/x/mobile/cmd/gobind
+            gomobile init
+            gomobile bind -target=ios -o ../XrayMobile.xcframework .
+            popd
+          fi
+
+          HEV_BIN="HevSocks5Tunnel.xcframework/ios-arm64/libhev-socks5-tunnel.a"
+          if [ ! -f "$HEV_BIN" ]; then
+            echo "Building HevSocks5Tunnel.xcframework via build-apple.sh..."
+            git submodule update --init --recursive third_party/hev-socks5-tunnel
+            pushd third_party/hev-socks5-tunnel
+            ./build-apple.sh
+            popd
+            cp -r third_party/hev-socks5-tunnel/HevSocks5Tunnel.xcframework ./HevSocks5Tunnel.xcframework
+          fi
+
+          echo "XrayMobile.xcframework and HevSocks5Tunnel.xcframework setup complete."
+
       - name: Resolve Swift Package Dependencies
         run: |
-          xcodebuild -resolvePackageDependencies -project sing-box.xcodeproj
+          xcodebuild -resolvePackageDependencies -project HushTunnel.xcodeproj -scheme SFI -derivedDataPath build/DerivedData
 
       - name: Compute Dynamic Version
         run: |
           COMMIT_COUNT=$(git rev-list --count HEAD)
-          echo "Computed Version: 1.0.$COMMIT_COUNT (Build: $COMMIT_COUNT)"
+
+          # App Store Connect refuses an upload whose build number is not
+          # strictly higher than one it already holds ("The bundle version must
+          # be higher than the previously uploaded version"). The commit count
+          # alone is not enough: two runs of the SAME commit - a re-run, or a
+          # manual dispatch after a push - produce an identical number, and the
+          # second upload is rejected after a full archive has been built.
+          #
+          # Appending the run number fixes the ordering in both directions.
+          # CFBundleVersion accepts up to three dot-separated integers compared
+          # componentwise, so for a newer commit the first component rises, and
+          # within one commit the second does. Both cases strictly increase.
+          BUILD_NUMBER="$COMMIT_COUNT.${GITHUB_RUN_NUMBER:-1}"
+
+          echo "Computed Version: 1.0.$COMMIT_COUNT (Build: $BUILD_NUMBER)"
           echo "APP_MARKETING_VERSION=1.0.$COMMIT_COUNT" >> $GITHUB_ENV
-          echo "APP_BUILD_NUMBER=$COMMIT_COUNT" >> $GITHUB_ENV
+          echo "APP_BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
       - name: Setup Signing Keychain & App Store API Key
         id: keychain_setup
+        env:
+          API_KEY_DATA: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 || secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_KEY_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}
+          DEV_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_P12_BASE64 || secrets.APPLE_DEVELOPER_P12_BASE64 }}
+          DEV_P12_PASS: ${{ secrets.APPLE_DEVELOPMENT_P12_PASSWORD || secrets.APPLE_DEVELOPER_P12_PASSWORD }}
+          DIST_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 || secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 || secrets.APPLE_CERTIFICATE_BASE64 }}
+          DIST_P12_PASS: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD || secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          
-          # 1. Setup App Store Connect API Key (.p8)
-          API_KEY_DATA="${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 || secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}"
-          API_KEY_ID="${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}"
-          API_KEY_ISSUER="${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
+          mkdir -p ~/.appstoreconnect/private_keys ./private_keys
 
+          # 1. Setup App Store Connect API Key (.p8)
           if [ -n "$API_KEY_DATA" ] && [ -n "$API_KEY_ID" ]; then
             echo "Setting up App Store Connect API Key: AuthKey_$API_KEY_ID.p8..."
-            # Check if base64 or raw string
-            if echo "$API_KEY_DATA" | grep -q "BEGIN PRIVATE KEY"; then
-              echo "$API_KEY_DATA" > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+            DEST_HOME="$HOME/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8"
+            DEST_TEMP="$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+            DEST_LOCAL="./private_keys/AuthKey_$API_KEY_ID.p8"
+
+            if printf '%s' "$API_KEY_DATA" | grep -q "BEGIN PRIVATE KEY"; then
+              printf '%s\n' "$API_KEY_DATA" > "$DEST_HOME"
             else
-              echo "$API_KEY_DATA" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+              printf '%s' "$API_KEY_DATA" | base64 --decode > "$DEST_HOME"
             fi
-            chmod 600 ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+            cp -f "$DEST_HOME" "$DEST_TEMP"
+            cp -f "$DEST_HOME" "$DEST_LOCAL"
+            chmod 600 "$DEST_HOME" "$DEST_TEMP" "$DEST_LOCAL"
+
+            echo "API_PRIVATE_KEYS_DIR=$RUNNER_TEMP" >> $GITHUB_ENV
             echo "API_KEY_CONFIGURED=true" >> $GITHUB_ENV
           else
             echo "API_KEY_CONFIGURED=false" >> $GITHUB_ENV
           fi
 
-          # 2. Setup Distribution Certificate (.p12) in dedicated keychain
-          P12_BASE64="${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 || secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 || secrets.APPLE_CERTIFICATE_BASE64 }}"
-          P12_PASS="${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD || secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD || secrets.APPLE_CERTIFICATE_PASSWORD }}"
-
-          if [ -n "$P12_BASE64" ]; then
-            echo "Creating temporary keychain for Apple Distribution Certificate..."
-            KEYCHAIN_PATH=$RUNNER_TEMP/build-signing.keychain-db
-            KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
-
-            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-            CERT_PATH=$RUNNER_TEMP/dist_cert.p12
-            export P12_RAW="$P12_BASE64"
-            python3 -c "import base64, os; open('$CERT_PATH', 'wb').write(base64.b64decode(os.environ['P12_RAW'].strip()))"
-
-            echo "Importing certificate into build keychain and login keychain..."
-            if [ -n "$P12_PASS" ]; then
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A || \
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "" -T /usr/bin/codesign -T /usr/bin/security -A || true
-            else
-              security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "" -T /usr/bin/codesign -T /usr/bin/security -A || true
-            fi
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" || true
-            security default-keychain -s "$KEYCHAIN_PATH" || true
-
-            # Also import into login keychain for xcodebuild exportArchive discovery
-            LOGIN_KEYCHAIN=~/Library/Keychains/login.keychain-db
-            if [ ! -f "$LOGIN_KEYCHAIN" ]; then
-              LOGIN_KEYCHAIN=~/Library/Keychains/login.keychain
-            fi
-            if [ -f "$LOGIN_KEYCHAIN" ]; then
-              security unlock-keychain -p "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
-              if [ -n "$P12_PASS" ]; then
-                security import "$CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "$P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || \
-                security import "$CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
-              else
-                security import "$CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
-              fi
-              security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
-            fi
-
-            echo "Keychain identities after import:"
-            security find-identity -v -p codesigning || true
-
-            # Append to user keychain search list
-            EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
-            security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
-            
-            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
-            echo "KEYCHAIN_CREATED=true" >> $GITHUB_ENV
-            echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
-          elif security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
-            echo "Found Apple Distribution certificate in runner host Keychain."
-            echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
-          else
-            echo "No Distribution Certificate secret detected."
-            echo "SIGNING_CONFIGURED=false" >> $GITHUB_ENV
+          # 2. Heal / normalize runner host default keychain (cures "Keychain Not Found" error on Mac mini)
+          LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+            LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain"
           fi
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            echo "Ensuring host default keychain is login keychain: $LOGIN_KEYCHAIN"
+            security default-keychain -s "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            security unlock-keychain -p "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+          fi
+
+          # 3. Setup temporary dedicated keychain for this build job
+          KEYCHAIN_PATH="$RUNNER_TEMP/build-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
+
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Trust chain: Apple has issued five generations of the Worldwide
+          # Developer Relations intermediate CA (G2-G6), and a freshly issued
+          # Development/Distribution certificate can chain through any of
+          # them depending on when Apple minted it - importing only G3 (the
+          # old default here) left newer certs unable to build a chain to
+          # the root ("unable to build chain to self-signed root" /
+          # errSecInternalComponent during codesign). Import every
+          # generation, plus the root CAs, so whichever one a given
+          # certificate actually needs is present.
+          for CERT_URL in \
+            https://www.apple.com/appleca/AppleIncRootCertificate.cer \
+            https://www.apple.com/certificateauthority/AppleRootCA-G2.cer \
+            https://www.apple.com/certificateauthority/AppleRootCA-G3.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG2.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG5.cer \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer \
+          ; do
+            CERT_FILE="$RUNNER_TEMP/$(basename "$CERT_URL")"
+            if curl --fail --silent --show-error --location "$CERT_URL" --output "$CERT_FILE"; then
+              security import "$CERT_FILE" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign 2>/dev/null || true
+            else
+              echo "::warning::Could not download $CERT_URL - skipping"
+            fi
+          done
+
+          # Import Apple Development certificate (for xcodebuild archive with automatic signing)
+          if [ -n "$DEV_P12_BASE64" ]; then
+            echo "Importing Apple Development Certificate (.p12)..."
+            DEV_CERT_PATH="$RUNNER_TEMP/dev_cert.p12"
+            export DEV_RAW="$DEV_P12_BASE64"
+            python3 -c "import base64, os; raw=''.join(os.environ['DEV_RAW'].split()); open('$DEV_CERT_PATH', 'wb').write(base64.b64decode(raw, validate=True))"
+            chmod 600 "$DEV_CERT_PATH"
+            security import "$DEV_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$DEV_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security
+            if [ -f "$LOGIN_KEYCHAIN" ]; then
+              security import "$DEV_CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "$DEV_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
+            fi
+          fi
+
+          # Import Apple Distribution certificate (for xcodebuild exportArchive to App Store)
+          if [ -n "$DIST_P12_BASE64" ]; then
+            echo "Importing Apple Distribution Certificate (.p12)..."
+            DIST_CERT_PATH="$RUNNER_TEMP/dist_cert.p12"
+            export DIST_RAW="$DIST_P12_BASE64"
+            python3 -c "import base64, os; raw=''.join(os.environ['DIST_RAW'].split()); open('$DIST_CERT_PATH', 'wb').write(base64.b64decode(raw, validate=True))"
+            chmod 600 "$DIST_CERT_PATH"
+            security import "$DIST_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$DIST_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security
+            if [ -f "$LOGIN_KEYCHAIN" ]; then
+              security import "$DIST_CERT_PATH" -k "$LOGIN_KEYCHAIN" -P "$DIST_P12_PASS" -T /usr/bin/codesign -T /usr/bin/security -A 2>/dev/null || true
+            fi
+          fi
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+          fi
+
+          # Set user keychain search list: build keychain first, login keychain second
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security list-keychains -d user -s "$KEYCHAIN_PATH" "$LOGIN_KEYCHAIN"
+          else
+            security list-keychains -d user -s "$KEYCHAIN_PATH"
+          fi
+
+          echo "Codesigning identities in build keychain:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+          echo "KEYCHAIN_CREATED=true" >> $GITHUB_ENV
+          echo "SIGNING_CONFIGURED=true" >> $GITHUB_ENV
 
       - name: Build & Export Signed App Store Package
         run: |
           mkdir -p build/output
+          mkdir -p build/DerivedData
+
+          # Clean stale build artifacts and local CI derived data
+          rm -rf build/HushTunnel.xcarchive build/output/* build/DerivedData/* 2>/dev/null || true
 
           if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
             echo "Unlocking build signing keychain..."
             security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security default-keychain -s "$KEYCHAIN_PATH"
-            EXISTING_KEYCHAINS=$(security list-keychains -d user | sed -e "s/^[ 	]*//" | tr -d "\"" | tr "\n" " ")
-            security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+          fi
+
+          LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+            LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain"
+          fi
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security unlock-keychain -p "" "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            security list-keychains -d user -s "$KEYCHAIN_PATH" "$LOGIN_KEYCHAIN"
+          else
+            security list-keychains -d user -s "$KEYCHAIN_PATH"
           fi
 
           echo "Active codesigning identities in session:"
@@ -217,32 +403,22 @@ jobs:
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           BUILD_NUM="${{ env.APP_BUILD_NUMBER }}"
 
-          # NOTE: archiving must produce a *signed* app with the real entitlements
-          # (com.apple.developer.networking.networkextension, App Groups, etc.) baked
-          # in at compile time. Xcode only embeds those from a provisioning profile
-          # that actually declares the matching capabilities; without one it silently
-          # omits them, and no amount of re-signing at export time can add them back
-          # after the fact. Previously this step fell back to an UNSIGNED build
-          # (`CODE_SIGNING_ALLOWED=NO`) on any failure, which always shipped an
-          # archive with no entitlements at all -> "Missing Entitlement" on upload.
-          # Fix: use automatic signing with -allowProvisioningUpdates (backed by the
-          # App Store Connect API key, same as the export step below) so Xcode
-          # creates/updates provisioning profiles with the right capabilities itself.
-          # Never fall back to an unsigned archive for an App Store build.
           AUTH_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
 
-          echo "Building Release xcarchive with Xcode..."
+          echo "Building Release xcarchive with Xcode (automatic signing)..."
           if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
             echo "Archiving with automatic signing + App Store Connect API key (-allowProvisioningUpdates)..."
             xcodebuild archive \
-              -project sing-box.xcodeproj \
+              -project HushTunnel.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
+              -derivedDataPath build/DerivedData \
               -destination "generic/platform=iOS" \
               -allowProvisioningUpdates \
               -authenticationKeyPath "$AUTH_KEY_PATH" \
               -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
               -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}" \
+              COMPILER_INDEX_STORE_ENABLE=NO \
               CODE_SIGN_STYLE=Automatic \
               DEVELOPMENT_TEAM="8Q8Y559285" \
               MARKETING_VERSION="$VERSION" \
@@ -250,10 +426,12 @@ jobs:
           else
             echo "No App Store Connect API key available - archiving with automatic signing against locally installed profiles/identities..."
             xcodebuild archive \
-              -project sing-box.xcodeproj \
+              -project HushTunnel.xcodeproj \
               -scheme SFI \
               -archivePath build/HushTunnel.xcarchive \
+              -derivedDataPath build/DerivedData \
               -destination "generic/platform=iOS" \
+              COMPILER_INDEX_STORE_ENABLE=NO \
               CODE_SIGN_STYLE=Automatic \
               DEVELOPMENT_TEAM="8Q8Y559285" \
               MARKETING_VERSION="$VERSION" \
@@ -261,7 +439,7 @@ jobs:
           fi
 
           echo "Preparing exportOptions.plist for App Store..."
-          cat << PLIST_EOF > build/exportOptions.plist
+          cat << 'PLIST_EOF' > build/exportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -281,12 +459,8 @@ jobs:
           </dict>
           </plist>
           PLIST_EOF
-          # Clean leading whitespace in generated plist
           sed -i "" "s/^[ 	]*//" build/exportOptions.plist || true
 
-          AUTH_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
-
-          echo "Checking App Store Connect API Key at: $AUTH_KEY_PATH"
           if [ "$API_KEY_CONFIGURED" = "true" ] && [ -f "$AUTH_KEY_PATH" ]; then
             echo "Exporting signed App Store IPA with automatic provisioning from App Store Connect..."
             xcodebuild -exportArchive \
@@ -315,7 +489,12 @@ jobs:
           fi
 
       - name: Upload to App Store Connect / TestFlight
-        if: env.API_KEY_CONFIGURED == 'true' && (github.ref == 'refs/heads/main' || inputs.upload_to_app_store == true || startsWith(github.ref, 'refs/tags/'))
+        # Every successful build is uploaded. The ref allowlist that used to
+        # gate this silently skipped uploads from any other branch, and a
+        # workflow_dispatch defaulted to not uploading at all, so builds that
+        # looked green never reached TestFlight. The only gate left is whether
+        # the App Store Connect API key is actually configured.
+        if: env.API_KEY_CONFIGURED == 'true'
         run: |
           echo "Uploading IPA to App Store Connect / TestFlight via altool..."
           xcrun altool --upload-app \
@@ -325,15 +504,22 @@ jobs:
             --apiIssuer "${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER }}"
 
       - name: Upload Artifacts
+        # actions/upload-artifact@v4 requires GitHub.com artifact API which Forgejo
+        # (GHES) does not implement. Without this guard the job fails on Forgejo even
+        # though the IPA was already successfully uploaded to TestFlight in the step above.
+        if: github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
         with:
           name: HushTunnel-iOS-IPA
-          path: |
-            build/output/*.ipa
-            build/output/HushTunnel.ipa
+          # The glob already matches HushTunnel.ipa; listing it again uploaded it twice.
+          path: build/output/*.ipa
+          # IPAs are large; the retention workflow also keeps only the newest two.
+          retention-days: 3
 
       - name: Determine Release Tag
         id: tag_info
+        # GitHub release steps below only work on GitHub.com, not Forgejo.
+        if: github.server_url == 'https://github.com'
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
             TAG_NAME="${{ inputs.release_tag }}"
@@ -345,6 +531,7 @@ jobs:
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
       - name: Generate Dynamic Release Notes
+        if: github.server_url == 'https://github.com'
         run: |
           VERSION="${{ env.APP_MARKETING_VERSION }}"
           TAG="${{ steps.tag_info.outputs.TAG_NAME }}"
@@ -389,17 +576,62 @@ jobs:
           sed -i '' "s/\${VERSION}/$VERSION/g" RELEASE_NOTES.md
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') && github.ref != 'refs/heads/dev'
-        with:
-          tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
-          name: ${{ inputs.release_title || steps.tag_info.outputs.TAG_NAME }}
-          body_path: RELEASE_NOTES.md
-          draft: false
-          prerelease: false
-          files: |
-            build/output/*.ipa
-            build/output/HushTunnel.ipa
-            build/output/SHA256SUMS.txt
+        if: github.server_url == 'https://github.com' && success()
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag_info.outputs.TAG_NAME }}
+          TITLE: ${{ inputs.release_title || steps.tag_info.outputs.TAG_NAME }}
+        run: |
+          command -v gh >/dev/null 2>&1 || brew install gh
+
+          # Re-running the same commit (manual re-run, or re-pushing to dev
+          # without a new commit) recomputes the SAME tag every time. The
+          # previous softprops/action-gh-release step would then hit a
+          # "ReleaseAsset already_exists" error re-uploading identically
+          # named assets (HushTunnel.ipa, SHA256SUMS.txt) to an already
+          # -published release, and the release silently never got the new
+          # build. Make this idempotent instead: create the release if it's
+          # missing, then always (re)upload with --clobber so a re-run
+          # unconditionally lands the fresh IPA, regardless of prior state.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - updating notes and assets."
+            gh release edit "$TAG" \
+              --title "$TITLE" \
+              --notes-file RELEASE_NOTES.md \
+              --draft=false \
+              --prerelease=false \
+              --latest
+          else
+            echo "Creating release $TAG."
+            gh release create "$TAG" \
+              --title "$TITLE" \
+              --notes-file RELEASE_NOTES.md \
+              --target "${{ github.sha }}" \
+              --latest
+          fi
+
+          gh release upload "$TAG" \
+            build/output/*.ipa \
+            build/output/SHA256SUMS.txt \
+            --clobber
+
+      - name: Clean signing credentials
+        if: always()
+        run: |
+          LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
+          if [ ! -f "$LOGIN_KEYCHAIN" ]; then
+            LOGIN_KEYCHAIN="$HOME/Library/Keychains/login.keychain"
+          fi
+
+          # Restore the search list and default keychain to the host login keychain
+          # BEFORE deleting the temp keychain. This prevents the Mac mini from
+          # ever losing its default keychain ("Keychain Not Found" error).
+          if [ -f "$LOGIN_KEYCHAIN" ]; then
+            security default-keychain -s "$LOGIN_KEYCHAIN" 2>/dev/null || true
+            security list-keychains -d user -s "$LOGIN_KEYCHAIN" 2>/dev/null || true
+          fi
+          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          fi
+          rm -f "$RUNNER_TEMP/dev_cert.p12" "$RUNNER_TEMP/dist_cert.p12" "$RUNNER_TEMP/dist_cert.pem" "$RUNNER_TEMP"/Apple*.cer
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"

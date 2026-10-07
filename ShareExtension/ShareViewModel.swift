@@ -2,24 +2,65 @@ import Foundation
 import Library
 import UniformTypeIdentifiers
 
-@MainActor
-final class ShareViewModel: ObservableObject {
-    @Published private(set) var files: [TaildropSendFile] = []
-    @Published private(set) var endpoints: [TaildropTargetEndpoint] = []
-    @Published private(set) var isLoading = true
-    @Published private(set) var isSending = false
-    @Published private(set) var isFinished = false
-    @Published private(set) var unavailableMessage: String?
-    @Published var alert: AlertState?
+// Taildrop (Tailscale peer-to-peer file transfer) is a sing-box/Libbox dashboard
+// feature, not part of HushTunnel's own product; Taildrop's types can no longer
+// be linked into the iOS build at all (see Library/Network/HTTPClient.swift).
+// The iOS Share Extension is kept installed (so sharing to HushTunnel doesn't
+// disappear from the system Share Sheet) but just reports the feature as
+// unavailable rather than offering any peer picker.
+#if os(iOS)
+    @MainActor
+    final class ShareViewModel: ObservableObject {
+        @Published private(set) var isLoading = false
+        @Published private(set) var isSending = false
+        @Published private(set) var isFinished = false
+        @Published private(set) var unavailableMessage: String? = String(localized: "Sharing to HushTunnel is not supported")
+        @Published var alert: AlertState?
 
-    var onFinish: (() -> Void)?
-    var onCancel: (() -> Void)?
-    var onOpenApplication: ((URL) -> Void)?
+        var onFinish: (() -> Void)?
+        var onCancel: (() -> Void)?
+        var onOpenApplication: ((URL) -> Void)?
 
-    private var loaded = false
-    private var session: TaildropSendSession?
+        static func setupService() {
+            do {
+                try ApplicationLocale.apply()
+            } catch {
+                NSLog("failed to set locale: \(error)")
+            }
+        }
 
-    static func setupService() {
+        func load(_: [NSExtensionItem]) {}
+
+        func cancel() {
+            onCancel?()
+        }
+
+        func openApplication() {
+            onOpenApplication?(URL(string: "hushtunnel://taildrop")!)
+            cancel()
+        }
+    }
+
+#else
+
+    @MainActor
+    final class ShareViewModel: ObservableObject {
+        @Published private(set) var files: [TaildropSendFile] = []
+        @Published private(set) var endpoints: [TaildropTargetEndpoint] = []
+        @Published private(set) var isLoading = true
+        @Published private(set) var isSending = false
+        @Published private(set) var isFinished = false
+        @Published private(set) var unavailableMessage: String?
+        @Published var alert: AlertState?
+
+        var onFinish: (() -> Void)?
+        var onCancel: (() -> Void)?
+        var onOpenApplication: ((URL) -> Void)?
+
+        private var loaded = false
+        private var session: TaildropSendSession?
+
+        static func setupService() {
         do {
             try ServiceSetup.apply(crashReportSource: "ShareExtension")
         } catch {
@@ -143,7 +184,7 @@ final class ShareViewModel: ObservableObject {
     }
 
     func openApplication() {
-        onOpenApplication?(URL(string: "sing-box://taildrop")!)
+        onOpenApplication?(URL(string: "hushtunnel://taildrop")!)
         cancel()
     }
 
@@ -237,3 +278,4 @@ final class ShareViewModel: ObservableObject {
         }
     }
 }
+#endif

@@ -1,21 +1,36 @@
 import Foundation
 import GRDB
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 
 public extension Profile {
-    nonisolated func updateRemoteProfile() async throws {
+    nonisolated func updateRemoteProfile(
+        content suppliedContent: String? = nil,
+        reloadIfSelected: Bool = true
+    ) async throws {
         if type != .remote {
             return
         }
-        let url = remoteURL
-        let remoteContent = try await HTTPClient.getStringAsync(url)
-        try await BlockingIO.run {
-            var error: NSError?
-            LibboxCheckConfig(remoteContent, &error)
-            if let error {
-                throw error
-            }
+        let remoteContent: String
+        if let suppliedContent {
+            remoteContent = suppliedContent
+        } else {
+            remoteContent = try await HTTPClient.getStringAsync(remoteURL)
         }
+        // iOS stores a plain vless:// link (ProvisionHelper.extractVlessLink
+        // already validated it on the way in), not a sing-box config
+        // document — LibboxCheckConfig would reject it as invalid JSON.
+        // macOS/tvOS still store sing-box JSON and validate it here as before.
+        #if !os(iOS)
+            try await BlockingIO.run {
+                var error: NSError?
+                LibboxCheckConfig(remoteContent, &error)
+                if let error {
+                    throw error
+                }
+            }
+        #endif
         await MainActor.run {
             lastUpdated = Date()
         }
@@ -27,7 +42,9 @@ public extension Profile {
             }
         } catch {}
         try await writeAsync(remoteContent)
-        try await onProfileUpdated()
+        if reloadIfSelected {
+            try await onProfileUpdated()
+        }
     }
 
     nonisolated func onProfileUpdated() async throws {

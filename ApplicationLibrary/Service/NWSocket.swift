@@ -1,6 +1,34 @@
 import Foundation
-import Libbox
 import Network
+
+// A plain 4-byte big-endian length prefix followed by the body (room for the
+// full maxMessageSize below, unlike a 2-byte prefix). This used to be
+// LibboxEncodeChunkedMessage/LibboxDecodeLengthChunk, but Libbox can no
+// longer be linked into the iOS build at all (see
+// Library/Network/HTTPClient.swift), and ReportTransferServer.swift (iOS
+// only) needs this type. Only this process's own NWSocket.write()/.read()
+// calls ever need to agree on the wire format, so a from-scratch framing is
+// safe here.
+private let lengthPrefixSize = 4
+
+private func encodeLengthPrefixed(_ data: Data) -> Data {
+    let length = UInt32(data.count)
+    var framed = Data([
+        UInt8((length >> 24) & 0xFF),
+        UInt8((length >> 16) & 0xFF),
+        UInt8((length >> 8) & 0xFF),
+        UInt8(length & 0xFF),
+    ])
+    framed.append(data)
+    return framed
+}
+
+private func decodeLengthPrefix(_ data: Data) -> Int32 {
+    guard data.count == lengthPrefixSize else { return -1 }
+    let bytes = [UInt8](data)
+    let length = (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16) | (UInt32(bytes[2]) << 8) | UInt32(bytes[3])
+    return Int32(bitPattern: length)
+}
 
 public enum NWSocketError: Error {
     case connectionClosed
@@ -58,8 +86,8 @@ public final class NWSocket {
         bodyTimeout: TimeInterval = 60,
         maxMessageSize: Int = 32 * 1024 * 1024
     ) async throws -> Data {
-        let lengthChunk = try await receiveExactly(count: 2, timeout: headerTimeout, phase: "read header")
-        let length = Int(LibboxDecodeLengthChunk(lengthChunk))
+        let lengthChunk = try await receiveExactly(count: lengthPrefixSize, timeout: headerTimeout, phase: "read header")
+        let length = Int(decodeLengthPrefix(lengthChunk))
         guard length >= 0 else {
             connection.cancel()
             throw NWSocketError.invalidLength(length)
@@ -78,7 +106,7 @@ public final class NWSocket {
         guard let data else {
             return
         }
-        try await sendAndAwait(content: LibboxEncodeChunkedMessage(data), timeout: timeout, phase: "write")
+        try await sendAndAwait(content: encodeLengthPrefixed(data), timeout: timeout, phase: "write")
     }
 
     public func readRaw(count: Int, timeout: TimeInterval = 60) async throws -> Data {
@@ -93,7 +121,7 @@ public final class NWSocket {
         guard let data else {
             return
         }
-        connection.send(content: LibboxEncodeChunkedMessage(data), completion: .idempotent)
+        connection.send(content: encodeLengthPrefixed(data), completion: .idempotent)
     }
 
     public func cancel() {

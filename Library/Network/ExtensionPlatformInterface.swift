@@ -1,16 +1,25 @@
-import Foundation
-import Libbox
-import NetworkExtension
-import os
-import UserNotifications
-#if os(macOS)
-    import CoreWLAN
-#endif
-#if os(iOS) || os(tvOS)
-    import DeviceKit
-#endif
+// Sing-box/Libbox platform-callback glue for the old `ExtensionProvider`
+// base class, which iOS no longer uses at all (see ExtensionProvider.swift
+// — `Extension/PacketTunnelProvider.swift` is the real iOS entry point now,
+// implementing its own tun-fd/network-settings logic directly rather than
+// via this Libbox-protocol-conforming helper). Only referenced from this
+// file and from ExtensionProvider.swift itself elsewhere — both already
+// `#if !os(iOS)`-gated, so this file must be too (and must be: Libbox can
+// no longer be linked into the iOS build at all, see HTTPClient.swift).
+#if !os(iOS)
+    import Foundation
+    import Libbox
+    import NetworkExtension
+    import os
+    import UserNotifications
+    #if os(macOS)
+        import CoreWLAN
+    #endif
+    #if os(tvOS)
+        import DeviceKit
+    #endif
 
-public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, LibboxCommandServerHandlerProtocol {
+    public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, LibboxCommandServerHandlerProtocol {
     private static let logger = Logger(category: "ExtensionPlatformInterface")
     private let tunnel: ExtensionProvider
     private var networkSettings: NEPacketTunnelNetworkSettings?
@@ -893,4 +902,5 @@ public class ExtensionPlatformInterface: NSObject, LibboxPlatformInterfaceProtoc
             return entry
         }
     }
+    #endif
 #endif

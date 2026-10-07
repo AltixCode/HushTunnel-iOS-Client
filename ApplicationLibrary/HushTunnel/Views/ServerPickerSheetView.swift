@@ -144,11 +144,13 @@ public struct ServerPickerSheetView: View {
                                 }
                                 .padding(.vertical, 4)
                             }
+                            .accessibilityIdentifier("hush.server-row.\(server.id)")
                         }
                     }
                     .listStyle(.insetGrouped)
                 }
             }
+            .accessibilityIdentifier("hush.server-picker")
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Select Location")
             .navigationBarTitleDisplayMode(.inline)

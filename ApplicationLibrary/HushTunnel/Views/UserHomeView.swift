@@ -6,45 +6,7 @@ public struct UserHomeView: View {
     @ObservedObject var lang = LanguageManager.shared
     @EnvironmentObject private var environments: ExtensionEnvironments
 
-    @State private var meResult: MeResult? = MeResult(
-        email: "demo@hushtunnel.com",
-        role: "USER",
-        subscriptions: [
-            SubscriptionInfo(
-                id: "sub-101",
-                planName: "Pro Freedom Plan (30 Days)",
-                expiryDate: "2026-10-01T00:00:00Z",
-                isActive: true,
-                usedBytes: 38_500_000_000,
-                totalBytes: 100_000_000_000,
-                subscriptionUrl: "vless://auto-config@5.255.125.216:443"
-            )
-        ],
-        servers: [
-            ServerNodeItem(
-                id: "netherlands-primary",
-                name: "Netherlands 01 (Amsterdam)",
-                countryCode: "NL",
-                flag: "🇳🇱",
-                city: "Amsterdam",
-                host: "5.255.125.216",
-                port: 443,
-                protocolName: "vless",
-                isDefault: true
-            ),
-            ServerNodeItem(
-                id: "germany-frankfurt",
-                name: "Germany 01 (Frankfurt)",
-                countryCode: "DE",
-                flag: "🇩🇪",
-                city: "Frankfurt",
-                host: "142.132.170.81",
-                port: 443,
-                protocolName: "vless",
-                isDefault: false
-            )
-        ]
-    )
+    @State private var meResult: MeResult? = nil
     @State private var isLoading = false
     @State private var isProvisioning = true
     @State private var errorMessage: String?
@@ -55,22 +17,21 @@ public struct UserHomeView: View {
     @State private var showChangePasswordSheet = false
     @State private var showDebugLogs = false
     @State private var showServerPickerSheet = false
+    @State private var showIAPSheet = false
+    @State private var showAccountSettings = false
     @State private var selectedServer: ServerNodeItem? = nil
 
-    @State private var isTestingConnection = false
-    @State private var testResult: ConnectionTestResult? = nil
+    private var hasActiveSubscription: Bool {
+        guard let subs = meResult?.subscriptions else { return false }
+        return subs.contains(where: { $0.isActive })
+    }
 
-    struct ConnectionTestResult: Equatable {
-        enum Status {
-            case success
-            case warning
-            case error
-        }
-        let status: Status
-        let ip: String
-        let latencyMs: Int
-        let serverMatches: Bool
-        let message: String
+    private var isConnected: Bool {
+        environments.extensionProfile?.status == .connected || environments.extensionProfile?.status == .reasserting
+    }
+
+    private var shouldShowTunnelUI: Bool {
+        hasActiveSubscription || isConnected
     }
 
     private var currentDisplayServer: ServerNodeItem {
@@ -102,133 +63,101 @@ public struct UserHomeView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Status & Connect Section
-                        VStack(spacing: 24) {
-                            if let profile = environments.extensionProfile {
-                                ConnectCircleButton(profile: profile, isProvisioning: isProvisioning)
-                                    .padding(.top, 24)
-                                ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
-
-                                // Test Connection Button & Result
-                                VStack(spacing: 8) {
+                        if isLoading && meResult == nil {
+                            ProgressView()
+                                .padding(.vertical, 40)
+                        } else if shouldShowTunnelUI {
+                            // Status & Connect Section
+                            VStack(spacing: 24) {
+                                if let profile = environments.extensionProfile {
+                                    ConnectCircleButton(
+                                        profile: profile,
+                                        isProvisioning: isProvisioning,
+                                        prepareForConnect: prepareConnection
+                                    )
+                                        .padding(.top, 24)
+                                    ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
+                                    ConnectionTestView(profile: profile, expectedHost: currentDisplayServer.host)
+                                } else {
                                     Button {
-                                        testConnection()
+                                        Task {
+                                            try? await ExtensionProfile.install()
+                                            await environments.reload()
+                                        }
                                     } label: {
-                                        HStack(spacing: 6) {
-                                            if isTestingConnection {
-                                                ProgressView()
-                                                    .scaleEffect(0.8)
-                                            } else {
-                                                Image(systemName: "bolt.horizontal.circle.fill")
-                                                    .font(.system(size: 14))
-                                            }
-                                            Text(isTestingConnection ? lang.tr("vpn.testing") : lang.tr("vpn.testConnection"))
-                                                .font(.caption)
-                                                .fontWeight(.semibold)
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.accentColor.opacity(0.15))
+                                                .frame(width: 140, height: 140)
+                                            Image(systemName: "power")
+                                                .font(.system(size: 48, weight: .semibold))
+                                                .foregroundColor(.accentColor)
                                         }
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(Color.accentColor.opacity(0.12))
-                                        .foregroundColor(.accentColor)
-                                        .cornerRadius(20)
                                     }
-                                    .disabled(isTestingConnection)
-
-                                    if let res = testResult {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: res.status == .success ? "checkmark.shield.fill" : (res.status == .warning ? "exclamationmark.shield.fill" : "xmark.octagon.fill"))
-                                                .font(.caption)
-                                                .foregroundColor(res.status == .success ? .green : (res.status == .warning ? .orange : .red))
-
-                                            Text(res.message)
-                                                .font(.caption2)
-                                                .fontWeight(.medium)
-                                                .foregroundColor(res.status == .success ? .green : (res.status == .warning ? .orange : .red))
-                                                .multilineTextAlignment(.center)
-                                        }
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background((res.status == .success ? Color.green : (res.status == .warning ? Color.orange : Color.red)).opacity(0.1))
-                                        .cornerRadius(10)
-                                    }
-                                }
-                            } else {
-                                Button {
-                                    Task {
-                                        try? await ExtensionProfile.install()
-                                        await environments.reload()
-                                    }
-                                } label: {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.accentColor.opacity(0.15))
-                                            .frame(width: 140, height: 140)
-                                        Image(systemName: "power")
-                                            .font(.system(size: 48, weight: .semibold))
-                                            .foregroundColor(.accentColor)
-                                    }
-                                }
-                                .padding(.top, 24)
-                                Text(lang.tr("vpn.disconnected"))
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            if let provisionError {
-                                Text(provisionError)
-                                    .font(.caption)
-                                    .foregroundColor(.red)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 20)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(24)
-                        .background(Color(uiColor: .systemBackground))
-                        .cornerRadius(24)
-                        .padding(.horizontal, 16)
-
-                        // Server Location Selector Card
-                        Button {
-                            showServerPickerSheet = true
-                        } label: {
-                            let s = currentDisplayServer
-                            HStack(spacing: 14) {
-                                Text(s.flag)
-                                    .font(.system(size: 30))
-
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(s.name)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-
-                                    Text("\(s.city ?? s.countryCode) · VLESS-Reality")
-                                        .font(.caption)
+                                    .padding(.top, 24)
+                                    Text(lang.tr("vpn.disconnected"))
+                                        .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
 
-                                Spacer()
-
-                                HStack(spacing: 4) {
-                                    Text("Switch")
+                                if let provisionError {
+                                    Text(provisionError)
                                         .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.accentColor)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption2)
-                                        .foregroundColor(.accentColor)
+                                        .foregroundColor(.red)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 20)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.accentColor.opacity(0.12))
-                                .cornerRadius(8)
                             }
-                            .padding(16)
+                            .frame(maxWidth: .infinity)
+                            .padding(24)
                             .background(Color(uiColor: .systemBackground))
-                            .cornerRadius(20)
+                            .cornerRadius(24)
                             .padding(.horizontal, 16)
+
+                            // Server Location Selector Card
+                            Button {
+                                showServerPickerSheet = true
+                            } label: {
+                                let s = currentDisplayServer
+                                HStack(spacing: 14) {
+                                    Text(s.flag)
+                                        .font(.system(size: 30))
+
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(s.name)
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
+
+                                        Text("\(s.city ?? s.countryCode) · VLESS-Reality")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    HStack(spacing: 4) {
+                                        Text("Switch")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.accentColor)
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption2)
+                                            .foregroundColor(.accentColor)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.accentColor.opacity(0.12))
+                                    .cornerRadius(8)
+                                }
+                                .padding(16)
+                                .background(Color(uiColor: .systemBackground))
+                                .cornerRadius(20)
+                                .padding(.horizontal, 16)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .disabled(isProvisioning)
+                            .accessibilityIdentifier("hush.server-switch-open")
                         }
-                        .buttonStyle(PlainButtonStyle())
 
                         // Subscriptions Section
                         if let subs = meResult?.subscriptions, !subs.isEmpty {
@@ -242,7 +171,9 @@ public struct UserHomeView: View {
                                         .padding(.horizontal, 16)
                                 }
                             }
-                        } else if !isLoading {
+                        }
+
+                        if !hasActiveSubscription && !isLoading {
                             // No subscription empty state
                             VStack(spacing: 14) {
                                 Image(systemName: "shield.slash")
@@ -257,6 +188,20 @@ public struct UserHomeView: View {
                                     .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 20)
+
+                                Button {
+                                    showIAPSheet = true
+                                } label: {
+                                    Text(lang.tr("iap.subscriptions"))
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 10)
+                                        .background(Color.accentColor)
+                                        .cornerRadius(10)
+                                }
+                                .padding(.top, 4)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(24)
@@ -265,28 +210,25 @@ public struct UserHomeView: View {
                             .padding(.horizontal, 16)
                         }
 
-                        // Official Web Store & Renewal Notice Card
+                        // App Store-compliant subscription and wallet purchases.
                         VStack(alignment: .leading, spacing: 14) {
                             HStack(spacing: 10) {
-                                Image(systemName: "globe.americas.fill")
+                                Image(systemName: "creditcard.fill")
                                     .font(.title3)
                                     .foregroundColor(.accentColor)
-                                Text(lang.tr("web.storeNotice"))
+                                Text(lang.tr("iap.title"))
                                     .font(.headline)
                                     .foregroundColor(.primary)
                             }
-
-                            Text(lang.tr("web.storeDesc"))
+                            Text(lang.tr("iap.description"))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-
-                            Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                            Button { showIAPSheet = true } label: {
                                 HStack {
-                                    Image(systemName: "arrow.up.right.square")
-                                    Text("https://www.hushtunnel.com")
-                                        .fontWeight(.semibold)
+                                    Image(systemName: "apple.logo")
+                                    Text(lang.tr("iap.subscriptions")).fontWeight(.semibold)
                                     Spacer()
-                                    Image(systemName: "safari")
+                                    Image(systemName: "chevron.right")
                                 }
                                 .padding(12)
                                 .frame(maxWidth: .infinity)
@@ -294,29 +236,7 @@ public struct UserHomeView: View {
                                 .foregroundColor(.accentColor)
                                 .cornerRadius(12)
                             }
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "checkmark.shield.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.accentColor)
-                                        .padding(.top, 2)
-                                    Text(lang.tr("web.paymentMethods"))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                HStack(alignment: .top, spacing: 8) {
-                                    Image(systemName: "person.2.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.blue)
-                                        .padding(.top, 2)
-                                    Text(lang.tr("web.resellerNotice"))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.top, 4)
+                            .accessibilityIdentifier("hush.iap.open")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(20)
@@ -379,7 +299,7 @@ public struct UserHomeView: View {
                         Button {
                             showDebugLogs = true
                         } label: {
-                            Image(systemName: "ladybug")
+                            Image(systemName: "doc.text.magnifyingglass")
                         }
 
                         Button {
@@ -389,11 +309,20 @@ public struct UserHomeView: View {
                         }
 
                         Button {
-                            authStore.logout()
+                            Task {
+                                try? await environments.extensionProfile?.stop()
+                                RevenueCatManager.shared.clearCachedProducts()
+                                authStore.logout()
+                            }
                         } label: {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                                 .foregroundColor(.red)
                         }
+
+                        Button { showAccountSettings = true } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityIdentifier("hush.account.settings-button")
                     }
                 }
             }
@@ -411,11 +340,11 @@ public struct UserHomeView: View {
             .sheet(isPresented: $showDebugLogs) {
                 NavigationStack {
                     LogView()
-                        .navigationTitle("Debug Logs")
+                        .navigationTitle(lang.tr("debug.logsTitle"))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") { showDebugLogs = false }
+                                Button(lang.tr("common.done")) { showDebugLogs = false }
                             }
                         }
                 }
@@ -432,95 +361,62 @@ public struct UserHomeView: View {
             .sheet(isPresented: $showOrdersSheet) {
                 OrdersListView()
             }
+            .sheet(isPresented: $showIAPSheet) {
+                InAppPurchaseSheetView(onPurchaseCompleted: refreshData)
+            }
+            .sheet(isPresented: $showAccountSettings) {
+                AccountSettingsSheetView()
+            }
             .task {
                 await environments.reload()
             }
             .onAppear(perform: refreshData)
-        }
-    }
-
-    private func testConnection() {
-        guard !isTestingConnection else { return }
-        isTestingConnection = true
-        testResult = nil
-
-        let expectedHost = currentDisplayServer.host
-
-        Task {
-            let start = DispatchTime.now()
-            do {
-                var req = URLRequest(url: URL(string: "https://api.ipify.org?format=json")!)
-                req.timeoutInterval = 7
-                req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-
-                let (data, response) = try await URLSession.shared.data(for: req)
-                let end = DispatchTime.now()
-                let latency = Int(Double(end.uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
-
-                // Secondary data verification: send request to apple.com
-                var appleReq = URLRequest(url: URL(string: "https://www.apple.com")!)
-                appleReq.timeoutInterval = 6
-                _ = try? await URLSession.shared.data(for: appleReq)
-
-                guard let httpRes = response as? HTTPURLResponse, (200...299).contains(httpRes.statusCode),
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let ip = json["ip"] as? String else {
-                    throw NSError(domain: "TestConnection", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid IP response"])
-                }
-
-                let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
-                let cleanExpected = expectedHost.trimmingCharacters(in: .whitespacesAndNewlines)
-                let matches = (cleanIp == cleanExpected)
-
-                await MainActor.run {
-                    if matches {
-                        self.testResult = ConnectionTestResult(
-                            status: .success,
-                            ip: cleanIp,
-                            latencyMs: latency,
-                            serverMatches: true,
-                            message: String(format: lang.tr("vpn.testSuccess"), latency, cleanIp)
-                        )
-                    } else {
-                        self.testResult = ConnectionTestResult(
-                            status: .warning,
-                            ip: cleanIp,
-                            latencyMs: latency,
-                            serverMatches: false,
-                            message: String(format: lang.tr("vpn.testIpMismatch"), cleanIp)
-                        )
-                    }
-                    self.isTestingConnection = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.testResult = ConnectionTestResult(
-                        status: .error,
-                        ip: "",
-                        latencyMs: 0,
-                        serverMatches: false,
-                        message: lang.tr("vpn.testFailed")
-                    )
-                    self.isTestingConnection = false
-                }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                refreshData()
             }
         }
     }
 
+    private func prepareConnection() async throws {
+        guard let activeSub = meResult?.subscriptions.first(where: { $0.isActive }) else {
+            throw NSError(domain: "HushTunnel", code: 1, userInfo: [NSLocalizedDescriptionKey: lang.tr("vpn.noSub")])
+        }
+        try await ProvisionHelper.provisionSubscription(
+            subscriptionUrl: activeSub.subscriptionUrl,
+            preferredServerId: currentDisplayServer.id,
+            preferredServerHost: currentDisplayServer.host
+        )
+    }
+
     private func switchServer(to newServer: ServerNodeItem) {
-        selectedServer = newServer
         isProvisioning = true
         Task {
             if let activeSub = meResult?.subscriptions.first(where: { $0.isActive }) {
                 do {
-                    try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl, preferredServerId: newServer.id)
-                    await MainActor.run { self.isProvisioning = false }
-                    if environments.extensionProfile?.status == .connected {
+                    let wasConnected = await MainActor.run {
+                        environments.extensionProfile?.status == .connected
+                    }
+                    try await ProvisionHelper.provisionSubscription(
+                        subscriptionUrl: activeSub.subscriptionUrl,
+                        preferredServerId: newServer.id,
+                        preferredServerHost: newServer.host,
+                        reloadRunningProfile: false
+                    )
+                    await environments.reload()
+                    await MainActor.run {
+                        self.selectedServer = newServer
+                        self.provisionError = nil
+                    }
+                    if wasConnected {
                         try await environments.extensionProfile?.restart()
                     }
+                    await MainActor.run { self.isProvisioning = false }
                 } catch {
                     print("Error switching server: \(error)")
-                    await MainActor.run { self.isProvisioning = false }
+                    await MainActor.run {
+                        self.provisionError = error.localizedDescription
+                        self.isProvisioning = false
+                    }
                 }
             } else {
                 await MainActor.run { self.isProvisioning = false }
@@ -536,11 +432,24 @@ public struct UserHomeView: View {
                 let meRes = try await ApiClient.shared.me()
                 await MainActor.run {
                     self.meResult = meRes
+                    self.selectedServer = ServerSelectionStore.resolve(
+                        servers: meRes.servers ?? [],
+                        currentServerID: self.selectedServer?.id
+                    )
                     self.isLoading = false
                 }
                 if let activeSub = meRes.subscriptions.first(where: { $0.isActive }) {
                     do {
-                        try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl)
+                        guard let serverID = await MainActor.run(body: { self.selectedServer?.id }) else {
+                            throw NSError(domain: "HushTunnel", code: 2, userInfo: [NSLocalizedDescriptionKey: lang.tr("vpn.noServer")])
+                        }
+                        let serverHost = await MainActor.run { self.selectedServer?.host }
+                        try await ProvisionHelper.provisionSubscription(
+                            subscriptionUrl: activeSub.subscriptionUrl,
+                            preferredServerId: serverID,
+                            preferredServerHost: serverHost
+                        )
+                        await environments.reload()
                         await MainActor.run {
                             self.provisionError = nil
                             self.isProvisioning = false
@@ -588,20 +497,9 @@ public struct SubscriptionCardView: View {
 
                 Spacer()
 
-                Link(destination: URL(string: "https://www.hushtunnel.com")!) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption2)
-                        Text(lang.tr("vpn.renew"))
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.accentColor.opacity(0.15))
-                    .foregroundColor(.accentColor)
-                    .cornerRadius(8)
-                }
+                Image(systemName: sub.isActive ? "checkmark.shield.fill" : "clock.badge.exclamationmark")
+                    .foregroundColor(sub.isActive ? .green : .orange)
+                    .accessibilityHidden(true)
             }
 
             // Usage Bar

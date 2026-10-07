@@ -1,20 +1,29 @@
 import ApplicationLibrary
 import FileProvider
 import Foundation
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 import Library
 import Network
 import UIKit
 import UserNotifications
 
 class ApplicationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    private var profileServer: ProfileServer?
     private var reportTransferServer: ReportTransferServer?
 
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        LibboxPrepareCrashSignalHandlers()
+        // Libbox's own crash-signal handlers are a sing-box feature; iOS no
+        // longer runs sing-box/Libbox at all (see
+        // Library/Network/HTTPClient.swift), so only NativeCrashReporter's
+        // own signal handling applies here.
+        #if !os(iOS)
+            LibboxPrepareCrashSignalHandlers()
+        #endif
         NativeCrashReporter.installForCurrentProcess()
-        LibboxReinstallCrashSignalHandlers()
+        #if !os(iOS)
+            LibboxReinstallCrashSignalHandlers()
+        #endif
         NSLog("Here I stand")
         do {
             try ServiceSetup.apply(crashReportSource: "Application")
@@ -87,16 +96,6 @@ class ApplicationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCe
     private nonisolated func setupBackground() async {
         if #available(iOS 16.0, *) {
             do {
-                let profileServer = try ProfileServer()
-                profileServer.start()
-                await MainActor.run {
-                    self.profileServer = profileServer
-                }
-                NSLog("started profile server")
-            } catch {
-                NSLog("setup profile server error: \(error.localizedDescription)")
-            }
-            do {
                 let reportTransferServer = try ReportTransferServer()
                 reportTransferServer.start()
                 await MainActor.run {
@@ -114,7 +113,7 @@ class ApplicationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCe
     private nonisolated func registerFileProviderDomain() {
         let domain = NSFileProviderDomain(
             identifier: NSFileProviderDomainIdentifier(AppConfiguration.fileProviderDomainID),
-            displayName: "sing-box"
+            displayName: "HushTunnel"
         )
         NSFileProviderManager.add(domain) { error in
             if let error {

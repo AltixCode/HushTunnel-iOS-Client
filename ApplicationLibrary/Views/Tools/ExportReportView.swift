@@ -1,3 +1,5 @@
+// Vestigial sing-box template UI, unreachable from HushTunnel's real navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift only ever shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView). Libbox can no longer be linked into the iOS build (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 #if os(tvOS)
 
     import DeviceDiscoveryUI
@@ -33,7 +35,7 @@
                         Section {
                             EmptyView()
                         } footer: {
-                            Text("To export this report to your iPhone or iPad, make sure sing-box is the **same version** on both devices and **VPN is disabled**.")
+                            Text("To export this report to your iPhone or iPad, make sure HushTunnel is the **same version** on both devices and **VPN is disabled**.")
                         }
 
                         DevicePicker(
@@ -202,4 +204,5 @@
         }
     }
 
+#endif
 #endif

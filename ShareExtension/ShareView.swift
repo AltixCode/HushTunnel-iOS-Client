@@ -33,6 +33,23 @@ struct ShareView: View {
         #endif
     }
 
+    #if os(iOS)
+        @ViewBuilder
+        private var content: some View {
+            if let unavailableMessage = viewModel.unavailableMessage {
+                centered {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text(unavailableMessage)
+                        .multilineTextAlignment(.center)
+                    Button("Open HushTunnel") {
+                        viewModel.openApplication()
+                    }
+                }
+            }
+        }
+    #else
     @ViewBuilder
     private var content: some View {
         if viewModel.isLoading {
@@ -57,7 +74,7 @@ struct ShareView: View {
                     .foregroundStyle(.secondary)
                 Text(unavailableMessage)
                     .multilineTextAlignment(.center)
-                Button("Open sing-box") {
+                Button("Open HushTunnel") {
                     viewModel.openApplication()
                 }
             }
@@ -115,6 +132,7 @@ struct ShareView: View {
         }
         return endpoint.endpointTag
     }
+    #endif
 
     private func centered(@ViewBuilder _ content: () -> some View) -> some View {
         VStack(spacing: 12) {

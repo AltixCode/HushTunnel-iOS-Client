@@ -1,3 +1,9 @@
+// Vestigial sing-box dashboard UI, unreachable from HushTunnel's real
+// navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift only ever
+// shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView). Depends on
+// ConnectionListViewModel.swift, which can no longer be linked into the iOS
+// build at all (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Library
 import SwiftUI
 #if canImport(UIKit) && !os(tvOS)
@@ -220,4 +226,5 @@ private struct ConnectionListContentView: View {
             }
         }
     }
+#endif
 #endif

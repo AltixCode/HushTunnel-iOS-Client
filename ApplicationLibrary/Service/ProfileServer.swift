@@ -1,3 +1,5 @@
+// Vestigial sing-box template UI, unreachable from HushTunnel's real navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift only ever shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView). Libbox can no longer be linked into the iOS build (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Foundation
 import Libbox
 import Library
@@ -12,7 +14,7 @@ public class ProfileServer {
     @available(iOS 16.0, macOS 13.0, *)
     public init() throws {
         listener = try NWListener(using: .applicationService)
-        listener.service = NWListener.Service(applicationService: "sing-box:profile")
+        listener.service = NWListener.Service(applicationService: "hushtunnel:profile")
         listener.newConnectionHandler = { connection in
             connection.stateUpdateHandler = { state in
                 if state == .ready {
@@ -164,3 +166,4 @@ public class ProfileServer {
         }
     }
 }
+#endif

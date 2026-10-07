@@ -1,3 +1,9 @@
+// Vestigial sing-box dashboard profile editor, only reachable from
+// ApplicationLibrary/Views/Profile/ProfileActionToolbar.swift (already gated)
+// and macOS-only MacLibrary. Depends on EditProfileContentViewModel.swift,
+// which can no longer be linked into the iOS build at all (see
+// Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Foundation
 import Library
 import SwiftUI
@@ -140,3 +146,4 @@ public struct EditProfileContentView: View {
         #endif
     }
 }
+#endif

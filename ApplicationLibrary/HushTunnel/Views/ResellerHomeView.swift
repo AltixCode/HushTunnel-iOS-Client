@@ -32,12 +32,12 @@ public struct ResellerHomeView: View {
     @State private var transactions: [WalletTransactionItem] = []
     @State private var subResellers: [SubReseller] = []
     @State private var plans: [PlanInfo] = []
-    @State private var gateways = GatewayInfo()
     @State private var servers: [ServerNodeItem] = []
     @State private var selectedServer: ServerNodeItem? = nil
     @State private var showServerPickerSheet = false
 
     @State private var isLoading = false
+    @State private var isProvisioning = true
     @State private var provisionError: String?
     @State private var statusMessage: String?
     @State private var errorMessage: String?
@@ -48,13 +48,17 @@ public struct ResellerHomeView: View {
     @State private var showSelfSubSheet = false
     @State private var showAddCustomerSheet = false
     @State private var showCreateOrderSheet = false
-    @State private var showDepositSheet = false
+    @State private var showIAPSheet = false
+    @State private var showAccountSettings = false
     @State private var showAddSubResellerSheet = false
     @State private var showLanguagePicker = false
     @State private var selectedCustomerForDetail: ResellerCustomer?
-    @State private var showCustomerDetailSheet = false
     @State private var prefilledOrderEmail = ""
     @State private var activeConnectionDetails: ResellerConnectionDetails?
+    // Paired with activeConnectionDetails only when the sheet is opened from
+    // the Subscriptions tab — nil for Orders / new-order-success, which have
+    // no subscription to manage.
+    @State private var activeSubscriptionActions: ResellerSubscriptionActions?
     @State private var showTransferFundsSheet = false
     @State private var transferInitialEmail = ""
     @State private var transferLockRecipient = false
@@ -72,20 +76,23 @@ public struct ResellerHomeView: View {
                     personalSub: personalSubscriptions.first(where: { $0.isActive }),
                     extensionProfile: environments.extensionProfile,
                     provisionError: provisionError,
+                    isProvisioning: isProvisioning,
                     servers: servers,
                     selectedServer: selectedServer,
+                    prepareForConnect: prepareConnection,
                     onOpenServerPicker: { showServerPickerSheet = true },
-                    onCreateSelfSub: { showSelfSubSheet = true }
+                    onCreateSelfSub: { showIAPSheet = true }
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.vpn"), systemImage: "shield.fill")
+                        .accessibilityIdentifier("hush.tab.vpn")
                 }
                 .tag(0)
 
                 // Tab 1: Dashboard & Wallet
                 ResellerDashboardTabView(
                     overview: overview,
-                    onAddFunds: { showDepositSheet = true },
+                    onAddFunds: { showIAPSheet = true },
                     onNewCustomer: { showAddCustomerSheet = true },
                     onNewReseller: { showAddSubResellerSheet = true },
                     onNewOrder: { showCreateOrderSheet = true }
@@ -101,7 +108,6 @@ public struct ResellerHomeView: View {
                     onAddCustomer: { showAddCustomerSheet = true },
                     onSelectCustomer: { c in
                         selectedCustomerForDetail = c
-                        showCustomerDetailSheet = true
                     },
                     onRefresh: refreshAll
                 )
@@ -113,12 +119,12 @@ public struct ResellerHomeView: View {
                 // Tab 3: Subscriptions
                 ResellerSubscriptionsTabView(
                     subscriptions: subscriptions,
-                    onExtend: { subId in extendSub(id: subId) },
-                    onToggle: { subId, enable in toggleSub(id: subId, enable: enable) },
-                    onResetUuid: { subId in resetUuid(id: subId) },
-                    onResetTraffic: { subId in resetTraffic(id: subId) },
-                    onRevoke: { subId in revokeSub(id: subId) },
-                    onSelectSub: { sub in
+                    onExtend: { subId in try await extendSub(id: subId) },
+                    onToggle: { subId, enable in try await toggleSub(id: subId, enable: enable) },
+                    onResetUuid: { subId in try await resetUuid(id: subId) },
+                    onResetTraffic: { subId in try await resetTraffic(id: subId) },
+                    onRevoke: { subId in try await revokeSub(id: subId) },
+                    onSelectSub: { sub, actions in
                         activeConnectionDetails = ResellerConnectionDetails(
                             title: sub.customerEmail,
                             planName: sub.planName,
@@ -128,6 +134,7 @@ public struct ResellerHomeView: View {
                             status: sub.isActive ? "ACTIVE" : "INACTIVE",
                             servers: sub.servers
                         )
+                        activeSubscriptionActions = actions
                     }
                 )
                 .tabItem {
@@ -155,6 +162,7 @@ public struct ResellerHomeView: View {
                             status: order.status,
                             servers: order.servers
                         )
+                        activeSubscriptionActions = nil
                     }
                 )
                 .tabItem {
@@ -191,6 +199,7 @@ public struct ResellerHomeView: View {
                     } label: {
                         Image(systemName: "globe")
                     }
+                    .accessibilityIdentifier("hush.language-picker")
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -198,7 +207,7 @@ public struct ResellerHomeView: View {
                         Button {
                             showDebugLogs = true
                         } label: {
-                            Image(systemName: "ladybug")
+                            Image(systemName: "doc.text.magnifyingglass")
                         }
 
                         Button {
@@ -216,11 +225,20 @@ public struct ResellerHomeView: View {
                         }
 
                         Button {
-                            authStore.logout()
+                            Task {
+                                try? await environments.extensionProfile?.stop()
+                                RevenueCatManager.shared.clearCachedProducts()
+                                authStore.logout()
+                            }
                         } label: {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                                 .foregroundColor(.red)
                         }
+
+                        Button { showAccountSettings = true } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityIdentifier("hush.account.settings-button")
                     }
                 }
             }
@@ -238,11 +256,11 @@ public struct ResellerHomeView: View {
             .sheet(isPresented: $showDebugLogs) {
                 NavigationStack {
                     LogView()
-                        .navigationTitle("Debug Logs")
+                        .navigationTitle(lang.tr("debug.logsTitle"))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") { showDebugLogs = false }
+                                Button(lang.tr("common.done")) { showDebugLogs = false }
                             }
                         }
                 }
@@ -252,17 +270,37 @@ public struct ResellerHomeView: View {
                     servers: servers,
                     selectedServer: selectedServer,
                     onSelect: { s in
-                        selectedServer = s
+                        isProvisioning = true
                         Task {
                             if let activeSub = personalSubscriptions.first(where: { $0.isActive }) {
                                 do {
-                                    try await ProvisionHelper.provisionSubscription(subscriptionUrl: activeSub.subscriptionUrl, preferredServerId: s.id)
-                                    if environments.extensionProfile?.status == .connected {
+                                    let wasConnected = await MainActor.run {
+                                        environments.extensionProfile?.status == .connected
+                                    }
+                                    try await ProvisionHelper.provisionSubscription(
+                                        subscriptionUrl: activeSub.subscriptionUrl,
+                                        preferredServerId: s.id,
+                                        preferredServerHost: s.host,
+                                        reloadRunningProfile: false
+                                    )
+                                    await environments.reload()
+                                    await MainActor.run {
+                                        selectedServer = s
+                                        provisionError = nil
+                                    }
+                                    if wasConnected {
                                         try await environments.extensionProfile?.restart()
                                     }
+                                    await MainActor.run { isProvisioning = false }
                                 } catch {
                                     print("Error switching server: \(error)")
+                                    await MainActor.run {
+                                        provisionError = error.localizedDescription
+                                        isProvisioning = false
+                                    }
                                 }
+                            } else {
+                                await MainActor.run { isProvisioning = false }
                             }
                         }
                     }
@@ -302,25 +340,27 @@ public struct ResellerHomeView: View {
                             amountUsd: res.amountUsd,
                             servers: res.servers
                         )
+                        activeSubscriptionActions = nil
                     }
                 )
             }
-            .sheet(item: $activeConnectionDetails) { details in
-                ResellerConnectionQrSheetView(details: details)
+            .sheet(item: $activeConnectionDetails, onDismiss: { activeSubscriptionActions = nil }) { details in
+                ResellerConnectionQrSheetView(details: details, actions: activeSubscriptionActions)
             }
-            .sheet(isPresented: $showDepositSheet) {
-                ResellerDepositSheetView(gateways: gateways, onCompleted: refreshAll)
+            .sheet(isPresented: $showIAPSheet) {
+                InAppPurchaseSheetView(onPurchaseCompleted: refreshAll)
+            }
+            .sheet(isPresented: $showAccountSettings) {
+                AccountSettingsSheetView()
             }
             .sheet(isPresented: $showAddSubResellerSheet) {
                 ResellerAddSubResellerSheetView(balance: overview?.balanceUsd ?? 0, onCompleted: refreshAll)
             }
-            .sheet(isPresented: $showCustomerDetailSheet) {
-                if let c = selectedCustomerForDetail {
-                    ResellerCustomerDetailSheetView(customer: c, onDeleted: {
-                        showCustomerDetailSheet = false
-                        refreshAll()
-                    })
-                }
+            .sheet(item: $selectedCustomerForDetail) { customer in
+                ResellerCustomerDetailSheetView(customer: customer, onDeleted: {
+                    selectedCustomerForDetail = nil
+                    refreshAll()
+                })
             }
             .sheet(isPresented: $showTransferFundsSheet) {
                 ResellerTransferFundsSheetView(
@@ -356,6 +396,7 @@ public struct ResellerHomeView: View {
 
     private func refreshAll() {
         isLoading = true
+        isProvisioning = true
         errorMessage = nil
         Task {
             let ov = try? await ApiClient.shared.resellerOverview()
@@ -365,7 +406,6 @@ public struct ResellerHomeView: View {
             let ord = try? await ApiClient.shared.resellerOrders()
             let dep = try? await ApiClient.shared.resellerDeposits()
             let pl = try? await ApiClient.shared.plans()
-            let gw = try? await ApiClient.shared.gateways()
             let subRes = try? await ApiClient.shared.resellerSubResellers()
             let tx = try? await ApiClient.shared.walletTransactions()
 
@@ -375,52 +415,86 @@ public struct ResellerHomeView: View {
                 if let sub { self.subscriptions = sub }
                 if let me {
                     self.personalSubscriptions = me.subscriptions
-                    if let srv = me.servers { self.servers = srv }
+                    if let srv = me.servers {
+                        self.servers = srv
+                        self.selectedServer = ServerSelectionStore.resolve(
+                            servers: srv,
+                            currentServerID: self.selectedServer?.id
+                        )
+                    }
                 }
                 if let ord { self.orders = ord }
                 if let dep { self.deposits = dep }
                 if let pl { self.plans = pl }
-                if let gw { self.gateways = gw }
                 if let subRes { self.subResellers = subRes }
                 if let tx { self.transactions = tx }
                 self.isLoading = false
             }
+
+            if let activeSub = me?.subscriptions.first(where: { $0.isActive }) {
+                do {
+                    guard let serverID = await MainActor.run(body: { self.selectedServer?.id }) else {
+                        throw NSError(domain: "HushTunnel", code: 2, userInfo: [NSLocalizedDescriptionKey: lang.tr("vpn.noServer")])
+                    }
+                    let serverHost = await MainActor.run { self.selectedServer?.host }
+                    try await ProvisionHelper.provisionSubscription(
+                        subscriptionUrl: activeSub.subscriptionUrl,
+                        preferredServerId: serverID,
+                        preferredServerHost: serverHost
+                    )
+                    await environments.reload()
+                    await MainActor.run {
+                        self.provisionError = nil
+                        self.isProvisioning = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.provisionError = error.localizedDescription
+                        self.isProvisioning = false
+                    }
+                }
+            } else {
+                await MainActor.run { self.isProvisioning = false }
+            }
         }
     }
 
-    private func extendSub(id: String) {
-        Task {
-            try? await ApiClient.shared.extendResellerSubscription(id: id, days: 30)
-            refreshAll()
+    private func prepareConnection() async throws {
+        guard let activeSub = personalSubscriptions.first(where: { $0.isActive }),
+              let server = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
+        else {
+            throw NSError(domain: "HushTunnel", code: 1, userInfo: [NSLocalizedDescriptionKey: lang.tr("vpn.noSub")])
         }
+        try await ProvisionHelper.provisionSubscription(
+            subscriptionUrl: activeSub.subscriptionUrl,
+            preferredServerId: server.id,
+            preferredServerHost: server.host
+        )
     }
 
-    private func toggleSub(id: String, enable: Bool) {
-        Task {
-            try? await ApiClient.shared.toggleResellerSubscription(id: id, enable: enable)
-            refreshAll()
-        }
+    private func extendSub(id: String) async throws {
+        try await ApiClient.shared.extendResellerSubscription(id: id, days: 30)
+        refreshAll()
     }
 
-    private func resetUuid(id: String) {
-        Task {
-            try? await ApiClient.shared.resetResellerSubscriptionUuid(id: id)
-            refreshAll()
-        }
+    private func toggleSub(id: String, enable: Bool) async throws {
+        try await ApiClient.shared.toggleResellerSubscription(id: id, enable: enable)
+        refreshAll()
     }
 
-    private func resetTraffic(id: String) {
-        Task {
-            try? await ApiClient.shared.resetResellerSubscriptionTraffic(id: id)
-            refreshAll()
-        }
+    private func resetUuid(id: String) async throws {
+        try await ApiClient.shared.resetResellerSubscriptionUuid(id: id)
+        refreshAll()
     }
 
-    private func revokeSub(id: String) {
-        Task {
-            try? await ApiClient.shared.revokeResellerSubscription(id: id)
-            refreshAll()
-        }
+    private func resetTraffic(id: String) async throws {
+        try await ApiClient.shared.resetResellerSubscriptionTraffic(id: id)
+        refreshAll()
+    }
+
+    private func revokeSub(id: String) async throws {
+        try await ApiClient.shared.revokeResellerSubscription(id: id)
+        refreshAll()
     }
 }
 
@@ -431,79 +505,102 @@ public struct ResellerPersonalVpnTabView: View {
     let personalSub: SubscriptionInfo?
     let extensionProfile: ExtensionProfile?
     let provisionError: String?
+    let isProvisioning: Bool
     let servers: [ServerNodeItem]
     let selectedServer: ServerNodeItem?
+    let prepareForConnect: () async throws -> Void
     let onOpenServerPicker: () -> Void
     let onCreateSelfSub: () -> Void
     @ObservedObject var lang = LanguageManager.shared
 
+    private var hasActiveSubscription: Bool {
+        personalSub?.isActive == true
+    }
+
+    private var isConnected: Bool {
+        extensionProfile?.status == .connected || extensionProfile?.status == .reasserting
+    }
+
+    private var shouldShowTunnelUI: Bool {
+        hasActiveSubscription || isConnected
+    }
+
     public var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Connect Circle — wired to the real ExtensionProfile the same
-                // way UserHomeView is; a reseller is also a customer of their
-                // own service and gets the same working connect/disconnect.
-                if let profile = extensionProfile {
-                    ConnectCircleButton(profile: profile)
-                        .padding(.top, 24)
-                    ConnectStatusLabel(profile: profile)
-                } else {
-                    ZStack {
-                        Circle()
-                            .fill(Color.gray.opacity(0.4))
-                            .frame(width: 140, height: 140)
-                        ProgressView()
-                    }
-                    .padding(.top, 24)
-                }
-
-                if let provisionError {
-                    Text(provisionError)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                }
-
-                // Server Location Selector Card
-                Button(action: onOpenServerPicker) {
-                    HStack(spacing: 14) {
+                if shouldShowTunnelUI {
+                    // Connect Circle — wired to the real ExtensionProfile the same
+                    // way UserHomeView is; a reseller is also a customer of their
+                    // own service and gets the same working connect/disconnect.
+                    if let profile = extensionProfile {
+                        ConnectCircleButton(
+                            profile: profile,
+                            isProvisioning: isProvisioning,
+                            prepareForConnect: prepareForConnect
+                        )
+                            .padding(.top, 24)
+                        ConnectStatusLabel(profile: profile, isProvisioning: isProvisioning)
                         let currentServer = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
-                        Text(currentServer?.flag ?? "🇳🇱")
-                            .font(.system(size: 30))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(currentServer?.name ?? "Netherlands 01 (Amsterdam)")
-                                .font(.headline)
-                                .foregroundColor(.primary)
-
-                            Text("\(currentServer?.city ?? currentServer?.countryCode ?? "Amsterdam") · VLESS-Reality")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        ConnectionTestView(profile: profile, expectedHost: currentServer?.host ?? "")
+                    } else {
+                        ZStack {
+                            Circle()
+                                .fill(Color.gray.opacity(0.4))
+                                .frame(width: 140, height: 140)
+                            ProgressView()
                         }
-
-                        Spacer()
-
-                        HStack(spacing: 4) {
-                            Text("Switch")
-                                .font(.caption)
-                                
-                                .foregroundColor(.accentColor)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundColor(.accentColor)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.12))
-                        .cornerRadius(8)
+                        .padding(.top, 24)
                     }
-                    .padding(16)
-                    .background(Color(uiColor: .systemBackground))
-                    .cornerRadius(20)
-                    .padding(.horizontal, 16)
+
+                    if let provisionError {
+                        Text(provisionError)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
+                    }
+
+                    // Server Location Selector Card
+                    Button(action: onOpenServerPicker) {
+                        HStack(spacing: 14) {
+                            let currentServer = selectedServer ?? servers.first(where: { $0.isDefault == true }) ?? servers.first
+                            Text(currentServer?.flag ?? "🇳🇱")
+                                .font(.system(size: 30))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(currentServer?.name ?? "Netherlands 01 (Amsterdam)")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+
+                                Text("\(currentServer?.city ?? currentServer?.countryCode ?? "Amsterdam") · VLESS-Reality")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            HStack(spacing: 4) {
+                                Text("Switch")
+                                    .font(.caption)
+                                    
+                                    .foregroundColor(.accentColor)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundColor(.accentColor)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.accentColor.opacity(0.12))
+                            .cornerRadius(8)
+                        }
+                        .padding(16)
+                        .background(Color(uiColor: .systemBackground))
+                        .cornerRadius(20)
+                        .padding(.horizontal, 16)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(isProvisioning)
                 }
-                .buttonStyle(PlainButtonStyle())
 
                 // Personal VPN Status Card
                 if let sub = personalSub {
@@ -557,6 +654,7 @@ public struct ResellerPersonalVpnTabView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(12)
                         }
+                        .accessibilityIdentifier("hush.iap.open-subscriptions")
                         .padding(.top, 6)
                     }
                     .padding(24)
@@ -607,10 +705,10 @@ public struct ResellerDashboardTabView: View {
                         }
                     }
 
-                    Link(destination: URL(string: "https://www.hushtunnel.com")!) {
+                    Button(action: onAddFunds) {
                         HStack {
-                            Image(systemName: "arrow.up.forward.app.fill")
-                            Text("Top Up at hushtunnel.com")
+                            Image(systemName: "creditcard.fill")
+                            Text(lang.tr("iap.addFunds"))
                                 
                         }
                         .frame(maxWidth: .infinity)
@@ -619,6 +717,7 @@ public struct ResellerDashboardTabView: View {
                         .foregroundColor(.white)
                         .cornerRadius(10)
                     }
+                    .accessibilityIdentifier("hush.iap.open-wallet")
                 }
                 .padding(20)
                 .background(Color(uiColor: .systemBackground))
@@ -703,26 +802,31 @@ public struct ResellerCustomersTabView: View {
             .padding(16)
 
             List(filtered) { customer in
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(customer.email)
-                            
-                        Text("Created: \(DateUtils.formatDateWithShamsi(customer.createdAt))")
-                            .font(.caption2)
+                Button {
+                    onSelectCustomer(customer)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(customer.email)
+                                .foregroundColor(.primary)
+
+                            Text("Created: \(DateUtils.formatDateWithShamsi(customer.createdAt))")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
                             .foregroundColor(.secondary)
                     }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onSelectCustomer(customer)
-                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("hush.reseller.customer-row")
             }
+            .id("customers-\(lang.currentLanguage.rawValue)")
         }
     }
 }
@@ -731,13 +835,20 @@ public struct ResellerCustomersTabView: View {
 
 public struct ResellerSubscriptionsTabView: View {
     let subscriptions: [ResellerSubscription]
-    let onExtend: (String) -> Void
-    let onToggle: (String, Bool) -> Void
-    let onResetUuid: (String) -> Void
-    let onResetTraffic: (String) -> Void
-    let onRevoke: (String) -> Void
-    var onSelectSub: ((ResellerSubscription) -> Void)? = nil
+    let onExtend: (String) async throws -> Void
+    let onToggle: (String, Bool) async throws -> Void
+    let onResetUuid: (String) async throws -> Void
+    let onResetTraffic: (String) async throws -> Void
+    let onRevoke: (String) async throws -> Void
+    // Carries the row's own management actions up to the parent, which hands
+    // them to the QR/details sheet. Management buttons used to live directly
+    // on the row, tightly packed next to the row's own tap target — easy to
+    // misclick "Revoke" when meaning to open the subscription. They now only
+    // exist inside the sheet, so the row itself is a single, unambiguous tap
+    // target that always opens details.
+    var onSelectSub: ((ResellerSubscription, ResellerSubscriptionActions) -> Void)? = nil
     @State private var search = ""
+    @ObservedObject var lang = LanguageManager.shared
 
     private var filtered: [ResellerSubscription] {
         if search.isEmpty { return subscriptions }
@@ -750,70 +861,80 @@ public struct ResellerSubscriptionsTabView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            TextField("Search subscriptions...", text: $search)
+            TextField(lang.tr("reseller.searchSubscriptions"), text: $search)
                 .padding(10)
                 .background(Color(uiColor: .secondarySystemGroupedBackground))
                 .cornerRadius(10)
                 .padding(16)
 
             List(filtered) { sub in
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(sub.customerEmail)
-                            
-                        Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                Button {
+                    onSelectSub?(
+                        sub,
+                        ResellerSubscriptionActions(
+                            subscriptionId: sub.id,
+                            isActive: sub.isActive,
+                            onExtend: { try await onExtend(sub.id) },
+                            onToggleDisable: { try await onToggle(sub.id, !sub.isActive) },
+                            onResetUuid: { try await onResetUuid(sub.id) },
+                            onRevoke: { try await onRevoke(sub.id) }
+                        )
+                    )
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(sub.customerEmail)
+
+                            Text("\(sub.planName) · Expires \(DateUtils.formatDateWithShamsi(sub.expiryDate))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Text(sub.isActive ? lang.tr("reseller.subStatusActive") : lang.tr("reseller.subStatusDisabled"))
+                            .font(.caption2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                            .foregroundColor(sub.isActive ? .green : .red)
+                            .cornerRadius(6)
                     }
-                    Spacer()
-                    Text(sub.isActive ? "Active" : "Disabled")
-                        .font(.caption2)
-                        
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(sub.isActive ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
-                        .foregroundColor(sub.isActive ? .green : .red)
-                        .cornerRadius(6)
+                    .padding(.vertical, 6)
                 }
+                .buttonStyle(.plain)
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    onSelectSub?(sub)
-                }
-
-                // Action Row
-                HStack(spacing: 8) {
-                    Button("+30 Days") { onExtend(sub.id) }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-
-                    Button(sub.isActive ? "Disable" : "Enable") { onToggle(sub.id, !sub.isActive) }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-
-                    Button("Reset UUID") { onResetUuid(sub.id) }
-                        .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-
-                    Spacer()
-
-                    Button("Revoke") { onRevoke(sub.id) }
-                        .font(.caption2)
-                        .foregroundColor(.red)
-                }
+                .accessibilityIdentifier("hush.reseller.subscription-row")
             }
-            .padding(.vertical, 6)
+            .id("subscriptions-\(lang.currentLanguage.rawValue)")
         }
-        }
+    }
+}
+
+// Bundles one subscription's management actions (extend / disable-enable /
+// reset UUID / revoke), already bound to its subscription id, so the QR
+// details sheet can render and confirm them without needing its own copy of
+// the API-calling closures.
+public struct ResellerSubscriptionActions {
+    public let subscriptionId: String
+    public let isActive: Bool
+    public let onExtend: () async throws -> Void
+    public let onToggleDisable: () async throws -> Void
+    public let onResetUuid: () async throws -> Void
+    public let onRevoke: () async throws -> Void
+
+    public init(
+        subscriptionId: String,
+        isActive: Bool,
+        onExtend: @escaping () async throws -> Void,
+        onToggleDisable: @escaping () async throws -> Void,
+        onResetUuid: @escaping () async throws -> Void,
+        onRevoke: @escaping () async throws -> Void
+    ) {
+        self.subscriptionId = subscriptionId
+        self.isActive = isActive
+        self.onExtend = onExtend
+        self.onToggleDisable = onToggleDisable
+        self.onResetUuid = onResetUuid
+        self.onRevoke = onRevoke
     }
 }
 
@@ -1405,7 +1526,9 @@ public struct ResellerCreateOrderSheetView: View {
     var onOrderSuccess: ((CreateResellerOrderResponse) -> Void)? = nil
 
     @Environment(\.dismiss) var dismiss
+    @ObservedObject var lang = LanguageManager.shared
     @State private var email = ""
+    @State private var customerSearch = ""
     @State private var selectedPlanId = ""
     @State private var isProcessing = false
     @State private var errorMessage: String?
@@ -1421,33 +1544,41 @@ public struct ResellerCreateOrderSheetView: View {
                     EmailDomainChipsView(email: $email)
 
                     if !customers.isEmpty {
-                        let matching = customers.filter {
-                            email.isEmpty ? true : $0.email.lowercased().contains(email.lowercased())
-                        }
-                        if !matching.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(matching.prefix(4)) { c in
-                                        Button(action: { email = c.email }) {
-                                            Text(c.email)
-                                                .font(.caption2)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(Color.accentColor.opacity(0.12))
-                                                .foregroundColor(.accentColor)
-                                                .cornerRadius(8)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                }
-                                .padding(.vertical, 2)
-                            }
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.secondary)
+                            TextField(lang.tr("reseller.searchExistingCustomer"), text: $customerSearch)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .accessibilityIdentifier("hush.reseller.order-customer-search")
                         }
 
-                        Picker("Existing Customer", selection: $email) {
-                            Text("Select an existing customer").tag("")
-                            ForEach(customers) { c in
-                                Text(c.email).tag(c.email)
+                        let matching = customers.filter { customer in
+                            customerSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                customer.email.localizedCaseInsensitiveContains(customerSearch)
+                        }
+                        if matching.isEmpty {
+                            Text(lang.tr("reseller.noMatchingCustomers"))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(matching.prefix(12)) { customer in
+                                Button {
+                                    email = customer.email
+                                    customerSearch = customer.email
+                                } label: {
+                                    HStack {
+                                        Text(customer.email)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if email.caseInsensitiveCompare(customer.email) == .orderedSame {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.accentColor)
+                                        }
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -1495,7 +1626,10 @@ public struct ResellerCreateOrderSheetView: View {
                 }
             }
             .onAppear {
-                if !initialEmail.isEmpty { email = initialEmail }
+                if !initialEmail.isEmpty {
+                    email = initialEmail
+                    customerSearch = initialEmail
+                }
                 if selectedPlanId.isEmpty, let f = plans.first { selectedPlanId = f.id }
             }
         }
@@ -1523,115 +1657,6 @@ public struct ResellerCreateOrderSheetView: View {
     }
 }
 
-// MARK: - Reseller Deposit Sheet
-
-public struct ResellerDepositSheetView: View {
-    let gateways: GatewayInfo
-    let onCompleted: () -> Void
-    @Environment(\.dismiss) var dismiss
-    @State private var amountString = "50"
-    @State private var selectedGateway = "MANUAL"
-    @State private var isProcessing = false
-    @State private var errorMessage: String?
-
-    public var body: some View {
-        NavigationStack {
-            Form {
-                Section(header: Text("Deposit Amount (USD)")) {
-                    TextField("Amount in USD", text: $amountString)
-                        .keyboardType(.decimalPad)
-                }
-
-                Section(header: Text("Payment Method")) {
-                    if gateways.cryptomus {
-                        HStack {
-                            Text("Cryptomus (USDT/Crypto)")
-                            Spacer()
-                            if selectedGateway == "CRYPTOMUS" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "CRYPTOMUS" }
-                    }
-
-                    if gateways.nowpayments {
-                        HStack {
-                            Text("NOWPayments")
-                            Spacer()
-                            if selectedGateway == "NOWPAYMENTS" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "NOWPAYMENTS" }
-                    }
-
-                    if gateways.revolut {
-                        HStack {
-                            Text("Revolut Pay")
-                            Spacer()
-                            if selectedGateway == "REVOLUT" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedGateway = "REVOLUT" }
-                    }
-
-                    HStack {
-                        Text("Manual / Admin Credit")
-                        Spacer()
-                        if selectedGateway == "MANUAL" { Image(systemName: "checkmark").foregroundColor(.accentColor) }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { selectedGateway = "MANUAL" }
-                }
-
-                if let err = errorMessage {
-                    Section { Text(err).foregroundColor(.red).font(.caption) }
-                }
-
-                Section {
-                    Button(action: handleDeposit) {
-                        HStack {
-                            Spacer()
-                            if isProcessing { ProgressView().padding(.trailing, 8) }
-                            Text("Deposit Funds")
-                            Spacer()
-                        }
-                    }
-                    .disabled((Double(amountString) ?? 0) <= 0 || isProcessing)
-                }
-            }
-            .navigationTitle("Add Balance")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-    }
-
-    private func handleDeposit() {
-        guard let amount = Double(amountString), amount > 0 else { return }
-        isProcessing = true
-        errorMessage = nil
-        Task {
-            do {
-                let res = try await ApiClient.shared.createResellerDeposit(amountUsd: amount, gateway: selectedGateway)
-                await MainActor.run {
-                    isProcessing = false
-                    if let urlStr = res.checkoutUrl, let url = URL(string: urlStr) {
-                        UIApplication.shared.open(url)
-                    }
-                    dismiss()
-                    onCompleted()
-                }
-            } catch {
-                await MainActor.run {
-                    isProcessing = false
-                    errorMessage = error.localizedDescription
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Reseller Customer Detail Sheet
 
 public struct ResellerCustomerDetailSheetView: View {
@@ -1640,6 +1665,8 @@ public struct ResellerCustomerDetailSheetView: View {
     @ObservedObject var lang = LanguageManager.shared
     @Environment(\.dismiss) var dismiss
     @State private var detail: ResellerCustomerDetail?
+    @State private var isLoadingDetail = true
+    @State private var detailError: String?
     @State private var newPasswordInput = ""
     @State private var generatedPasswordResult: String?
     @State private var isProcessing = false
@@ -1657,7 +1684,22 @@ public struct ResellerCustomerDetailSheetView: View {
                 }
 
                 Section(header: Text("Active Subscriptions")) {
-                    if let subs = detail?.subscriptions, !subs.isEmpty {
+                    if isLoadingDetail {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                    } else if let detailError {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(detailError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                            Button(lang.tr("common.refresh")) {
+                                Task { await loadDetail() }
+                            }
+                        }
+                    } else if let subs = detail?.subscriptions, !subs.isEmpty {
                         ForEach(subs) { s in
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(s.planName)
@@ -1721,22 +1763,29 @@ public struct ResellerCustomerDetailSheetView: View {
                 }
             }
             .navigationTitle("Customer Details")
+            .accessibilityIdentifier("hush.reseller.customer-detail")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
             }
-            .onAppear {
-                Task {
-                    if let d = try? await ApiClient.shared.resellerCustomerDetails(id: customer.id) {
-                        await MainActor.run { detail = d }
-                    }
-                }
-            }
+            .task(id: customer.id) { await loadDetail() }
             .sheet(item: $subscriptionForQR) { s in
                 URLQRCodeSheet(url: s.subscriptionUrl, title: s.planName)
             }
         }
+    }
+
+    @MainActor
+    private func loadDetail() async {
+        isLoadingDetail = true
+        detailError = nil
+        do {
+            detail = try await ApiClient.shared.resellerCustomerDetails(id: customer.id)
+        } catch {
+            detailError = error.localizedDescription
+        }
+        isLoadingDetail = false
     }
 
     private func handlePasswordChange(newPassword: String?) {
@@ -1805,9 +1854,36 @@ public struct ResellerConnectionDetails: Identifiable {
 
 public struct ResellerConnectionQrSheetView: View {
     let details: ResellerConnectionDetails
+    // Only set when this sheet was opened from the Subscriptions tab — nil
+    // for Orders and the new-order success screen, which have no
+    // subscription to manage. Gates the entire "Manage Subscription" section.
+    var actions: ResellerSubscriptionActions? = nil
     @Environment(\.dismiss) var dismiss
     @ObservedObject var lang = LanguageManager.shared
     @State private var copiedText: String?
+    @State private var showAdvanced = false
+
+    // Management used to live as small buttons directly on the subscription
+    // list row, right next to the row's own tap target — easy to misclick
+    // (e.g. landing on Revoke while meaning to open this sheet). It now only
+    // lives here, after the QR code, with its own confirmation and a
+    // plain-language description of what each action does.
+    @State private var pendingActionKey: String?
+    @State private var confirmActionKey: String?
+    @State private var actionErrorMessage: String?
+
+    private func runAction(_ key: String, _ action: @escaping () async throws -> Void) {
+        pendingActionKey = key
+        actionErrorMessage = nil
+        Task {
+            do {
+                try await action()
+            } catch {
+                await MainActor.run { actionErrorMessage = error.localizedDescription }
+            }
+            await MainActor.run { pendingActionKey = nil }
+        }
+    }
 
     public var body: some View {
         NavigationStack {
@@ -1853,9 +1929,24 @@ public struct ResellerConnectionQrSheetView: View {
                     }
 
                     // Subscription URL: one aggregate link that works across every
-                    // server, shown once as a single always-visible copy action —
-                    // NOT per-server (unlike the VLESS links below).
+                    // server, shown as the primary QR + copy action — the per-server
+                    // VLESS links below are collapsed behind an advanced toggle since
+                    // mainstream clients (including our own apps and V2Box) import the
+                    // subscription URL directly and get real DNS routing from it, unlike
+                    // a bare vless:// link.
                     if let subUrl = details.subscriptionUrl, !subUrl.isEmpty {
+                        ExternalQRCodeView(
+                            content: subUrl,
+                            foregroundColor: CGColor(gray: 0.0, alpha: 1.0),
+                            backgroundColor: CGColor(gray: 1.0, alpha: 1.0)
+                        )
+                        .accessibilityIdentifier("hush.reseller.sub-qr-code")
+                        .frame(width: 220, height: 220)
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(16)
+                        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 2)
+
                         Button {
                             UIPasteboard.general.string = subUrl
                             copiedText = "SubURL"
@@ -1867,7 +1958,7 @@ public struct ResellerConnectionQrSheetView: View {
                             HStack {
                                 Image(systemName: copiedText == "SubURL" ? "checkmark" : "link")
                                 Text(copiedText == "SubURL" ? "Copied Subscription URL" : "Copy Subscription URL")
-                                    
+
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -1876,58 +1967,134 @@ public struct ResellerConnectionQrSheetView: View {
                             .cornerRadius(12)
                         }
                         .padding(.horizontal)
+
+                        Button {
+                            withAnimation { showAdvanced.toggle() }
+                        } label: {
+                            HStack {
+                                Text(showAdvanced ? lang.tr("reseller.hideAdvancedLinks") : lang.tr("reseller.showAdvancedLinks"))
+                                Image(systemName: showAdvanced ? "chevron.up" : "chevron.down")
+                            }
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 4)
                     }
 
                     // Per-server VLESS links: one card per active edge server,
                     // default-first, exactly in the order the API returned them.
-                    if !details.servers.isEmpty {
-                        VStack(spacing: 12) {
-                            ForEach(details.servers) { server in
-                                ResellerServerLinkRowView(server: server)
-                            }
+                    // Collapsed by default when a subscription URL is available (see above).
+                    if showAdvanced || details.subscriptionUrl?.isEmpty != false {
+                        if details.subscriptionUrl?.isEmpty == false {
+                            Text(lang.tr("reseller.advancedLinksHint"))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
                         }
-                    } else if let vless = details.vlessLink, !vless.isEmpty {
-                        // Defensive fallback for older cached responses that
-                        // predate the `servers` array — single VLESS link only.
-                        VStack(spacing: 12) {
-                            ExternalQRCodeView(
-                                content: vless,
-                                foregroundColor: .labelColor,
-                                backgroundColor: CGColor(gray: 1.0, alpha: 0.0)
-                            )
-                            .frame(width: 220, height: 220)
-                            .padding()
-                            .background(Color.white)
-                            .cornerRadius(16)
-                            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 2)
-
-                            Button {
-                                UIPasteboard.general.string = vless
-                                copiedText = "VLESS"
-                                Task {
-                                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                    await MainActor.run { if copiedText == "VLESS" { copiedText = nil } }
+                        if !details.servers.isEmpty {
+                            VStack(spacing: 12) {
+                                ForEach(details.servers) { server in
+                                    ResellerServerLinkRowView(server: server)
                                 }
-                            } label: {
-                                HStack {
-                                    Image(systemName: copiedText == "VLESS" ? "checkmark" : "doc.on.doc")
-                                    Text(copiedText == "VLESS" ? "Copied VLESS Link" : "Copy VLESS Link")
-                                        
-                                }
-                                .frame(maxWidth: .infinity)
+                            }
+                        } else if let vless = details.vlessLink, !vless.isEmpty {
+                            // Defensive fallback for older cached responses that
+                            // predate the `servers` array — single VLESS link only.
+                            VStack(spacing: 12) {
+                                ExternalQRCodeView(
+                                    content: vless,
+                                    foregroundColor: CGColor(gray: 0.0, alpha: 1.0),
+                                    backgroundColor: CGColor(gray: 1.0, alpha: 1.0)
+                                )
+                                .accessibilityIdentifier("hush.reseller.qr-code")
+                                .frame(width: 220, height: 220)
                                 .padding()
-                                .background(Color.accentColor)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
+                                .background(Color.white)
+                                .cornerRadius(16)
+                                .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 2)
+
+                                Button {
+                                    UIPasteboard.general.string = vless
+                                    copiedText = "VLESS"
+                                    Task {
+                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                        await MainActor.run { if copiedText == "VLESS" { copiedText = nil } }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: copiedText == "VLESS" ? "checkmark" : "doc.on.doc")
+                                        Text(copiedText == "VLESS" ? "Copied VLESS Link" : "Copy VLESS Link")
+
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.accentColor)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
+                                }
                             }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     }
 
                     if let exp = details.expiryDate {
                         Text("Expires: \(DateUtils.formatDateWithShamsi(exp))")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    }
+
+                    if let actions = actions {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if let err = actionErrorMessage {
+                                Text(err)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+
+                            Text(lang.tr("reseller.manageSubscriptionSection"))
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            ManageSubscriptionActionRow(
+                                title: lang.tr("reseller.extend"),
+                                description: lang.tr("reseller.extendDescription"),
+                                isDestructive: false,
+                                isPending: pendingActionKey == "extend",
+                                action: { runAction("extend") { try await actions.onExtend() } }
+                            )
+
+                            ManageSubscriptionActionRow(
+                                title: actions.isActive ? lang.tr("reseller.toggleDisable") : lang.tr("reseller.toggleEnable"),
+                                description: actions.isActive ? lang.tr("reseller.disableDescription") : lang.tr("reseller.enableDescription"),
+                                isDestructive: actions.isActive,
+                                isPending: pendingActionKey == "toggle",
+                                action: {
+                                    if actions.isActive {
+                                        confirmActionKey = "disable"
+                                    } else {
+                                        runAction("toggle") { try await actions.onToggleDisable() }
+                                    }
+                                }
+                            )
+
+                            ManageSubscriptionActionRow(
+                                title: lang.tr("reseller.resetUuid"),
+                                description: lang.tr("reseller.resetUuidDescription"),
+                                isDestructive: true,
+                                isPending: pendingActionKey == "resetUuid",
+                                action: { confirmActionKey = "resetUuid" }
+                            )
+
+                            ManageSubscriptionActionRow(
+                                title: lang.tr("reseller.revoke"),
+                                description: lang.tr("reseller.revokeDescription"),
+                                isDestructive: true,
+                                isPending: pendingActionKey == "revoke",
+                                action: { confirmActionKey = "revoke" }
+                            )
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                     }
                 }
                 .padding(.bottom, 24)
@@ -1939,7 +2106,90 @@ public struct ResellerConnectionQrSheetView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .alert(
+                confirmActionTitle,
+                isPresented: Binding(get: { confirmActionKey != nil }, set: { if !$0 { confirmActionKey = nil } }),
+                presenting: confirmActionKey
+            ) { key in
+                Button(lang.tr("common.cancel"), role: .cancel) {}
+                Button(lang.tr("common.confirm"), role: .destructive) {
+                    guard let actions = actions else { return }
+                    switch key {
+                    case "disable":
+                        runAction("toggle") { try await actions.onToggleDisable() }
+                    case "resetUuid":
+                        runAction("resetUuid") { try await actions.onResetUuid() }
+                    case "revoke":
+                        runAction("revoke") { try await actions.onRevoke() }
+                    default:
+                        break
+                    }
+                }
+            } message: { _ in
+                Text(String(format: confirmActionMessageFormat, details.title))
+            }
         }
+    }
+
+    private var confirmActionTitle: String {
+        switch confirmActionKey {
+        case "disable": return lang.tr("reseller.confirmDisableSubTitle")
+        case "resetUuid": return lang.tr("reseller.confirmResetUuidTitle")
+        case "revoke": return lang.tr("reseller.confirmRevokeTitle")
+        default: return ""
+        }
+    }
+
+    private var confirmActionMessageFormat: String {
+        switch confirmActionKey {
+        case "disable": return lang.tr("reseller.confirmDisableSubMessage")
+        case "resetUuid": return lang.tr("reseller.confirmResetUuidMessage")
+        case "revoke": return lang.tr("reseller.confirmRevokeMessage")
+        default: return "%@"
+        }
+    }
+}
+
+// One row inside the QR sheet's "Manage Subscription" section: a title, a
+// plain-language description of what the action does and when a reseller
+// would need it, and a button — each is its own well-separated tap target,
+// unlike the old small buttons packed onto the list row.
+private struct ManageSubscriptionActionRow: View {
+    let title: String
+    let description: String
+    let isDestructive: Bool
+    let isPending: Bool
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(isDestructive ? .red : .primary)
+            Text(description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: action) {
+                HStack {
+                    Spacer()
+                    if isPending {
+                        ProgressView().scaleEffect(0.8)
+                    } else {
+                        Text(title)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.bordered)
+            .tint(isDestructive ? .red : .accentColor)
+            .disabled(isPending)
+        }
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(12)
     }
 }
 
@@ -1989,9 +2239,10 @@ private struct ResellerServerLinkRowView: View {
 
             ExternalQRCodeView(
                 content: server.vlessLink,
-                foregroundColor: .labelColor,
-                backgroundColor: CGColor(gray: 1.0, alpha: 0.0)
+                foregroundColor: CGColor(gray: 0.0, alpha: 1.0),
+                backgroundColor: CGColor(gray: 1.0, alpha: 1.0)
             )
+            .accessibilityIdentifier("hush.reseller.qr-code")
             .frame(width: 180, height: 180)
             .padding()
             .background(Color.white)

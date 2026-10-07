@@ -1,6 +1,7 @@
 import SwiftUI
 
 public struct AuthView: View {
+    @Environment(\.openURL) private var openURL
     @ObservedObject var authStore = AuthStore.shared
     @ObservedObject var lang = LanguageManager.shared
 
@@ -68,6 +69,7 @@ public struct AuthView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 TextField("user@example.com", text: $email)
+                                    .accessibilityIdentifier("hush.auth.email")
                                     .textContentType(.emailAddress)
                                     .keyboardType(.emailAddress)
                                     .autocapitalization(.none)
@@ -83,6 +85,7 @@ public struct AuthView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 SecureField("••••••••", text: $password)
+                                    .accessibilityIdentifier("hush.auth.password")
                                     .textContentType(isLogin ? .password : .newPassword)
                                     .padding(12)
                                     .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -107,7 +110,26 @@ public struct AuthView: View {
                                 .cornerRadius(12)
                             }
                             .disabled(!isFormValid || isLoading)
+                            .accessibilityIdentifier("hush.auth.submit")
                             .padding(.top, 8)
+
+                            if !isLogin {
+                                VStack(spacing: 8) {
+                                    Text(lang.tr("auth.legalNotice"))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                    HStack(spacing: 18) {
+                                        Button(lang.tr("privacy.policy")) {
+                                            if let url = URL(string: BrandConfig.privacyURL) { openURL(url) }
+                                        }
+                                        Button(lang.tr("terms.title")) {
+                                            if let url = URL(string: BrandConfig.termsURL) { openURL(url) }
+                                        }
+                                    }
+                                    .font(.caption)
+                                }
+                            }
 
                             // Toggle Switch
                             Button {
@@ -178,7 +200,7 @@ public struct AuthView: View {
 
                 await MainActor.run {
                     isLoading = false
-                    authStore.saveSession(token: result.token, email: result.email, role: result.role)
+                    authStore.saveSession(token: result.token, userId: result.userId, email: result.email, role: result.role)
                 }
             } catch {
                 await MainActor.run {

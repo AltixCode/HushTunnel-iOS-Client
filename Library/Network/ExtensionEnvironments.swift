@@ -182,7 +182,12 @@ public struct ImportRemoteProfileRequest: Hashable, Identifiable {
 
 @MainActor
 public class ExtensionEnvironments: ObservableObject {
-    @Published public var commandClient = CommandClient([.log, .status, .groups, .clashMode])
+    // Remote control of another instance's command server is a sing-box/Libbox
+    // feature (generic dashboard only); CommandClient/CommandTarget can't be
+    // linked into the iOS build at all (see HTTPClient.swift).
+    #if !os(iOS)
+        @Published public var commandClient = CommandClient([.log, .status, .groups, .clashMode])
+    #endif
     public let crashReportManager = CrashReportManager()
     public let oomReportManager = OOMReportManager()
     public let powerReportManager = PowerReportManager()
@@ -243,24 +248,26 @@ public class ExtensionEnvironments: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
-        commandClient.$isConnected
-            .sink { [weak self] isConnected in
-                guard isConnected else { return }
-                Task { @MainActor [weak self] in
-                    guard let self, remoteServer != nil else { return }
-                    remoteSessionHadConnected = true
-                    remoteSessionConnectedAt = Date()
+        #if !os(iOS)
+            commandClient.$isConnected
+                .sink { [weak self] isConnected in
+                    guard isConnected else { return }
+                    Task { @MainActor [weak self] in
+                        guard let self, remoteServer != nil else { return }
+                        remoteSessionHadConnected = true
+                        remoteSessionConnectedAt = Date()
+                    }
                 }
-            }
-            .store(in: &cancellables)
-        commandClient.$lastError
-            .sink { [weak self] error in
-                guard let error else { return }
-                Task { @MainActor [weak self] in
-                    self?.handleRemoteControlError(error)
+                .store(in: &cancellables)
+            commandClient.$lastError
+                .sink { [weak self] error in
+                    guard let error else { return }
+                    Task { @MainActor [weak self] in
+                        self?.handleRemoteControlError(error)
+                    }
                 }
-            }
-            .store(in: &cancellables)
+                .store(in: &cancellables)
+        #endif
         #if canImport(UIKit)
             NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
                 .sink { [weak self] _ in
@@ -280,38 +287,46 @@ public class ExtensionEnvironments: ObservableObject {
         if Variant.screenshotMode {
             extensionProfileLoading = false
             extensionProfile = .mock
-            commandClient.setupMockData()
+            #if !os(iOS)
+                commandClient.setupMockData()
+            #endif
         }
     }
 
-    public func postReload() {
-        Task {
-            await restoreRemoteControl()
-            await reload()
-            await crashReportManager.refresh()
-            await oomReportManager.refresh()
-            await powerReportManager.refresh()
+    // Not called on iOS: HushTunnel's own screens call reload() directly and
+    // have no crash/OOM/power report inbox or remote-control feature.
+    #if !os(iOS)
+        public func postReload() {
+            Task {
+                await restoreRemoteControl()
+                await reload()
+                await crashReportManager.refresh()
+                await oomReportManager.refresh()
+                await powerReportManager.refresh()
+            }
         }
-    }
+    #endif
 
     private var remoteControlRestored = false
-    private func restoreRemoteControl() async {
-        // Remote control is not available on tvOS.
-        #if !os(tvOS)
-            if Variant.screenshotMode {
-                return
-            }
-            guard !remoteControlRestored else { return }
-            remoteControlRestored = true
-            let serverID = await SharedPreferences.activeRemoteServerID.get()
-            guard serverID != 0, remoteServer == nil else { return }
-            guard let server = try? await RemoteServerManager.get(serverID) else {
-                await SharedPreferences.activeRemoteServerID.set(0)
-                return
-            }
-            enterRemoteControl(server)
-        #endif
-    }
+    #if !os(iOS)
+        private func restoreRemoteControl() async {
+            // Remote control is not available on tvOS.
+            #if !os(tvOS)
+                if Variant.screenshotMode {
+                    return
+                }
+                guard !remoteControlRestored else { return }
+                remoteControlRestored = true
+                let serverID = await SharedPreferences.activeRemoteServerID.get()
+                guard serverID != 0, remoteServer == nil else { return }
+                guard let server = try? await RemoteServerManager.get(serverID) else {
+                    await SharedPreferences.activeRemoteServerID.set(0)
+                    return
+                }
+                enterRemoteControl(server)
+            #endif
+        }
+    #endif
 
     public func reload() async {
         if Variant.screenshotMode {
@@ -350,50 +365,55 @@ public class ExtensionEnvironments: ObservableObject {
         return extensionProfile?.status.isConnectedStrict == true
     }
 
-    public func connect() {
-        if Variant.screenshotMode {
-            return
-        }
-        if remoteServer != nil {
-            if !commandClient.isConnected {
+    // Not called on iOS: HushTunnel's own screens drive extensionProfile
+    // directly (stop()/restart()) rather than through the command-client
+    // connection this manages.
+    #if !os(iOS)
+        public func connect() {
+            if Variant.screenshotMode {
+                return
+            }
+            if remoteServer != nil {
+                if !commandClient.isConnected {
+                    commandClient.connect()
+                }
+                return
+            }
+            guard let profile = extensionProfile else {
+                return
+            }
+            if profile.status.isConnected, !commandClient.isConnected {
                 commandClient.connect()
             }
-            return
         }
-        guard let profile = extensionProfile else {
-            return
-        }
-        if profile.status.isConnected, !commandClient.isConnected {
+
+        public func enterRemoteControl(_ server: RemoteServer) {
+            CommandTarget.setRemoteServer(server)
+            remoteServer = server
+            resetRemoteSessionState()
+            commandClient.disconnect()
+            commandClient.lastError = nil
             commandClient.connect()
+            Task {
+                await SharedPreferences.activeRemoteServerID.set(server.mustID)
+            }
         }
-    }
 
-    public func enterRemoteControl(_ server: RemoteServer) {
-        CommandTarget.setRemoteServer(server)
-        remoteServer = server
-        resetRemoteSessionState()
-        commandClient.disconnect()
-        commandClient.lastError = nil
-        commandClient.connect()
-        Task {
-            await SharedPreferences.activeRemoteServerID.set(server.mustID)
+        public func exitRemoteControl() {
+            guard remoteServer != nil else {
+                return
+            }
+            CommandTarget.setRemoteServer(nil)
+            remoteServer = nil
+            resetRemoteSessionState()
+            commandClient.disconnect()
+            commandClient.lastError = nil
+            connect()
+            Task {
+                await SharedPreferences.activeRemoteServerID.set(0)
+            }
         }
-    }
-
-    public func exitRemoteControl() {
-        guard remoteServer != nil else {
-            return
-        }
-        CommandTarget.setRemoteServer(nil)
-        remoteServer = nil
-        resetRemoteSessionState()
-        commandClient.disconnect()
-        commandClient.lastError = nil
-        connect()
-        Task {
-            await SharedPreferences.activeRemoteServerID.set(0)
-        }
-    }
+    #endif
 
     private func resetRemoteSessionState() {
         remoteSessionHadConnected = false
@@ -405,19 +425,21 @@ public class ExtensionEnvironments: ObservableObject {
     #if canImport(UIKit)
         private func handleEnterForeground() {
             isInBackground = false
-            // Recover the remote session on resume: a drop deferred while
-            // backgrounded, or a connection iOS suspended (whose isConnected
-            // flag may still read true against a now-dead socket). A suspension
-            // is not a real failure, so the retry budget is restored.
-            guard remoteServer != nil, remoteReconnectPending || !commandClient.isConnected else {
-                return
-            }
-            remoteReconnectPending = false
-            remoteReconnectAttempts = 0
-            if commandClient.isConnected {
-                commandClient.disconnect()
-            }
-            commandClient.connect()
+            #if !os(iOS)
+                // Recover the remote session on resume: a drop deferred while
+                // backgrounded, or a connection iOS suspended (whose isConnected
+                // flag may still read true against a now-dead socket). A suspension
+                // is not a real failure, so the retry budget is restored.
+                guard remoteServer != nil, remoteReconnectPending || !commandClient.isConnected else {
+                    return
+                }
+                remoteReconnectPending = false
+                remoteReconnectAttempts = 0
+                if commandClient.isConnected {
+                    commandClient.disconnect()
+                }
+                commandClient.connect()
+            #endif
         }
     #endif
 
@@ -427,44 +449,46 @@ public class ExtensionEnvironments: ObservableObject {
     /// (app suspension, network change, server restart) is recoverable instead,
     /// so it reconnects silently and only surfaces the error once reconnecting
     /// fails too.
-    private func handleRemoteControlError(_ error: CommandClient.ConnectionError) {
-        guard let server = remoteServer, commandClient.lastError == error else {
-            return
-        }
-        #if canImport(UIKit)
-            if isInBackground {
-                // A connection cannot be (re)established while iOS has the app
-                // suspended, and an alert shown now would be invisible. Defer
-                // recovery to the next foreground transition for any error,
-                // without spending a retry attempt on a doomed connection.
+    #if !os(iOS)
+        private func handleRemoteControlError(_ error: CommandClient.ConnectionError) {
+            guard let server = remoteServer, commandClient.lastError == error else {
+                return
+            }
+            #if canImport(UIKit)
+                if isInBackground {
+                    // A connection cannot be (re)established while iOS has the app
+                    // suspended, and an alert shown now would be invisible. Defer
+                    // recovery to the next foreground transition for any error,
+                    // without spending a retry attempt on a doomed connection.
+                    remoteSessionConnectedAt = nil
+                    remoteReconnectAttempts = 0
+                    remoteReconnectPending = true
+                    commandClient.lastError = nil
+                    return
+                }
+            #endif
+            if error.kind == .connectionLost {
+                if let connectedAt = remoteSessionConnectedAt,
+                   Date().timeIntervalSince(connectedAt) >= Self.remoteStableConnectionInterval
+                {
+                    remoteReconnectAttempts = 0
+                }
                 remoteSessionConnectedAt = nil
-                remoteReconnectAttempts = 0
-                remoteReconnectPending = true
-                commandClient.lastError = nil
-                return
+                if remoteReconnectAttempts < Self.maxRemoteReconnectAttempts {
+                    remoteReconnectAttempts += 1
+                    commandClient.lastError = nil
+                    commandClient.connect()
+                    return
+                }
             }
-        #endif
-        if error.kind == .connectionLost {
-            if let connectedAt = remoteSessionConnectedAt,
-               Date().timeIntervalSince(connectedAt) >= Self.remoteStableConnectionInterval
-            {
-                remoteReconnectAttempts = 0
-            }
-            remoteSessionConnectedAt = nil
-            if remoteReconnectAttempts < Self.maxRemoteReconnectAttempts {
-                remoteReconnectAttempts += 1
-                commandClient.lastError = nil
-                commandClient.connect()
-                return
-            }
+            // A non-retryable connect failure, or a dropped session whose retry
+            // budget is spent: fall back to the local device, then surface the
+            // failure once.
+            let description = remoteSessionHadConnected
+                ? "Disconnected from remote server \(server.displayName)"
+                : "Failed to connect to remote server \(server.displayName)"
+            exitRemoteControl()
+            remoteControlAlert = AlertState(errorMessage: "\(description)\n\(error.message)")
         }
-        // A non-retryable connect failure, or a dropped session whose retry
-        // budget is spent: fall back to the local device, then surface the
-        // failure once.
-        let description = remoteSessionHadConnected
-            ? "Disconnected from remote server \(server.displayName)"
-            : "Failed to connect to remote server \(server.displayName)"
-        exitRemoteControl()
-        remoteControlAlert = AlertState(errorMessage: "\(description)\n\(error.message)")
-    }
+    #endif
 }

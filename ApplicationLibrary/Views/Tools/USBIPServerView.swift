@@ -1,3 +1,5 @@
+// Vestigial sing-box template UI, unreachable from HushTunnel's real navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift only ever shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView). Libbox can no longer be linked into the iOS build (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Library
 import SwiftUI
 
@@ -221,7 +223,8 @@ public struct USBIPServerView: View {
         }
     #else
         private var providerFooter: some View {
-            Text("To provide devices, use a Chromium-based browser with the sing-box dashboard, or the sing-box graphical client on macOS or Android.")
+            Text("To provide devices, use a Chromium-based browser with the dashboard, or a compatible desktop or Android client.")
         }
     #endif
 }
+#endif

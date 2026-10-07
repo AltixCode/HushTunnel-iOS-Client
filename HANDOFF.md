@@ -52,7 +52,7 @@ vpn-ios-client/
 │   ├── Application.swift                # App entry point (launches RootView)
 │   └── Info.plist
 ├── Extension/                           # NetworkExtension packet tunnel provider
-└── sing-box.xcodeproj
+└── HushTunnel.xcodeproj
 ```
 
 ---
@@ -102,7 +102,7 @@ vpn-ios-client/
 
 ## 4. Building & Running in Xcode
 
-1. Open `sing-box.xcodeproj` in Xcode on macOS.
+1. Open `HushTunnel.xcodeproj` in Xcode on macOS.
 2. Ensure your Apple Developer Signing Team is selected under **Signing & Capabilities** for targets `SFI` and `Extension`.
 3. Build & run on an iOS Device or Simulator (iOS 16+).
 

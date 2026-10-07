@@ -1,5 +1,7 @@
 import Foundation
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 import NetworkExtension
 import os
 #if os(iOS)
@@ -92,7 +94,12 @@ public class ExtensionProfile: ObservableObject {
                     return
                 }
             #endif
-            LibboxPromoteOOMDraft()
+            #if !os(iOS)
+                LibboxPromoteOOMDraft()
+            #endif
+            // iOS: no equivalent — xray-core/hev-socks5-tunnel have no
+            // Libbox-style OOM crash-draft promotion mechanism, and nothing
+            // on iOS reads whatever that would have written.
         }
     }
 
@@ -290,13 +297,19 @@ public class ExtensionProfile: ObservableObject {
             manager.isOnDemandEnabled = false
             try await manager.saveToPreferences()
         }
-        do {
-            try await Task.detached(priority: .userInitiated) {
-                try LibboxNewStandaloneCommandClient()!.serviceClose()
-            }.value
-        } catch {
-            logger.debug("serviceClose error: \(error.localizedDescription)")
-        }
+        #if !os(iOS)
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try LibboxNewStandaloneCommandClient()!.serviceClose()
+                }.value
+            } catch {
+                logger.debug("serviceClose error: \(error.localizedDescription)")
+            }
+        #endif
+        // iOS: no equivalent graceful-shutdown handshake needed here —
+        // PacketTunnelProvider.stopTunnel() (xray-core + hev-socks5-tunnel)
+        // tears down fully in response to the standard stopVPNTunnel() call
+        // below, with no separate out-of-band command client involved.
         manager.connection.stopVPNTunnel()
     }
 
@@ -334,7 +347,7 @@ public class ExtensionProfile: ObservableObject {
         } else {
             tunnelProtocol.providerBundleIdentifier = AppConfiguration.extensionBundleID
         }
-        tunnelProtocol.serverAddress = "sing-box"
+        tunnelProtocol.serverAddress = "HushTunnel"
         manager.protocolConfiguration = tunnelProtocol
         manager.isEnabled = true
         try await manager.saveToPreferences()

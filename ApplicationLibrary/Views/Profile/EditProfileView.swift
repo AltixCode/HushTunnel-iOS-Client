@@ -1,3 +1,5 @@
+// Vestigial sing-box template UI, unreachable from HushTunnel's real navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift only ever shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView). Libbox can no longer be linked into the iOS build (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Libbox
 import Library
 import SwiftUI
@@ -59,7 +61,7 @@ public struct EditProfileView: View {
             } footer: {
                 if profile.type == .icloud {
                     let fileName = profile.path.isEmpty ? String(localized: "FileName") : profile.path
-                    Text("File will be located at iCloud Drive/sing-box/\(fileName)")
+                    Text("File will be located at iCloud Drive/HushTunnel/\(fileName)")
                 }
             }
             if profile.type == .remote {
@@ -130,3 +132,4 @@ public struct EditProfileView: View {
         }
     #endif
 }
+#endif

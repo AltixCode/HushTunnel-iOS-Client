@@ -1,12 +1,34 @@
-# sing-box-for-apple
+# HushTunnel
 
-Experimental iOS/macOS/tvOS client for sing-box, the universal proxy platform.
+HushTunnel is a managed VPN subscription service for iOS. Unlike a bring-your-own-server
+proxy client, HushTunnel sells access: a user creates an account, chooses a plan, pays
+through the App Store, and gets a managed connection with no configuration file to write
+or server to run. It also supports a multi-tier reseller model, where a distributor can
+manage their own customers, subscriptions, deposits and sub-resellers from within the app.
 
-## Documentation
+## What's in this repo
 
-[SFI](https://sing-box.sagernet.org/installation/clients/sfi/) | [SFM](https://sing-box.sagernet.org/installation/clients/sfm/)
+The product layer — account registration and sign-in, subscription plans and in-app
+purchase via RevenueCat, order history, a wallet with a transaction ledger, and the full
+reseller dashboard — lives under `ApplicationLibrary/HushTunnel/`. That layer talks to
+HushTunnel's own backend over more than 30 `/api/mobile/*` endpoints and has no
+equivalent upstream.
+
+## Acknowledgements
+
+HushTunnel's tunnelling layer is built on [sing-box](https://sing-box.sagernet.org/), the
+open-source universal proxy platform by [SagerNet](https://github.com/SagerNet/sing-box) /
+nekohasekai, and this repository began as a fork of their
+[sing-box-for-apple](https://github.com/SagerNet/sing-box-for-apple) client. The networking
+engine, platform integration, and a substantial portion of the surrounding code are their
+work, not ours; our own contribution is the account, billing and reseller layer described
+above. See [Open Source Acknowledgements](https://github.com/SagerNet/sing-box) and the
+engine's own [documentation](https://sing-box.sagernet.org/) for details on sing-box itself.
 
 ## License
+
+This project is distributed under the terms of the GNU General Public License v3, inherited
+from its sing-box-for-apple origin:
 
 ```
 Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>

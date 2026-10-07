@@ -1,5 +1,7 @@
 import Foundation
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 import Library
 import QRCode
 import SwiftUI
@@ -14,6 +16,13 @@ private extension CGColor {
     }
 }
 
+// Vestigial sing-box template UI (remote-profile QR import), unreachable from
+// HushTunnel's real navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift
+// only ever shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView).
+// Libbox can no longer be linked into the iOS build (see
+// Library/Network/HTTPClient.swift). URLQRCodeSheet/URLQRCodeContentView below
+// have no Libbox dependency and ARE used by UserHomeView/ResellerHomeView.
+#if !os(iOS)
 @MainActor
 public struct QRCodeContentView: View {
     private let profileName: String
@@ -72,6 +81,7 @@ public struct QRCodeSheet: View {
         #endif
     }
 }
+#endif
 
 @MainActor
 public struct URLQRCodeContentView: View {
