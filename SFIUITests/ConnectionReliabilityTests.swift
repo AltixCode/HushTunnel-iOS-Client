@@ -19,16 +19,24 @@ final class ConnectionReliabilityTests: XCTestCase {
             let passwordField = app.secureTextFields["hush.auth.password"]
             let submitButton = app.buttons["hush.auth.submit"]
             if !submitButton.isEnabled {
-                passwordField.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                XCTAssertTrue(passwordField.waitForExistence(timeout: 5))
+                // A direct .tap() (not a coordinate tap) reliably gives the
+                // field keyboard focus; coordinate taps occasionally land
+                // before the keyboard/responder chain settles right after
+                // the email field's own typeText, causing
+                // "Neither element nor any descendant has keyboard focus".
+                passwordField.tap()
+                let hasFocus = NSPredicate(format: "hasKeyboardFocus == true")
+                expectation(for: hasFocus, evaluatedWith: passwordField)
+                waitForExpectations(timeout: 5)
                 passwordField.typeText(password)
             }
             submitButton.tap()
         }
 
         let connectButton = app.buttons["hush.connect-toggle"]
-        if !connectButton.waitForExistence(timeout: 5), app.tabBars.buttons.count > 0 {
-            // Reseller accounts open on Overview; Personal VPN is the first tab.
-            app.tabBars.buttons.element(boundBy: 0).tap()
+        if !connectButton.waitForExistence(timeout: 5) {
+            app.ensureVpnTabVisible()
         }
         guard connectButton.waitForExistence(timeout: 5) else {
             throw XCTSkip("An authenticated account with an active subscription is required")

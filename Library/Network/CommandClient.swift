@@ -1,3 +1,5 @@
+// Vestigial sing-box dashboard/Taildrop/remote-control support code, not used by HushTunnel's own screens. Libbox can no longer be linked into the iOS build (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Combine
 import Foundation
 import Libbox
@@ -553,3 +555,4 @@ public extension ConnectionSort {
         }
     }
 }
+#endif

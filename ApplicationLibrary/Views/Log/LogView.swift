@@ -9,16 +9,62 @@ import SwiftUI
     #endif
 #endif
 
-public struct LogView: View {
-    @EnvironmentObject private var environments: ExtensionEnvironments
+#if os(iOS)
+    // The sing-box/Libbox command-server log stream (LogViewModel/LogDataModel,
+    // below) can't be linked into the iOS build at all (see
+    // Library/Network/HTTPClient.swift), and xray-core has no equivalent
+    // client-facing streaming API wired up yet. Standing in with a plain
+    // placeholder rather than leaving this screen unreachable.
+    public struct LogView: View {
+        public init() {}
 
-    public init() {}
-
-    public var body: some View {
-        LogViewContent(commandClient: environments.commandClient, initialSearchText: environments.logSearchText)
+        public var body: some View {
+            ContentUnavailableCompat(
+                title: NSLocalizedString("Logs Unavailable", comment: ""),
+                message: NSLocalizedString("Live log streaming isn't available in this build.", comment: ""),
+                systemImage: "doc.text"
+            )
+        }
     }
-}
 
+    private struct ContentUnavailableCompat: View {
+        let title: String
+        let message: String
+        let systemImage: String
+
+        var body: some View {
+            if #available(iOS 17.0, *) {
+                ContentUnavailableView(title, systemImage: systemImage, description: Text(message))
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text(title)
+                        .font(.headline)
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+#else
+    public struct LogView: View {
+        @EnvironmentObject private var environments: ExtensionEnvironments
+
+        public init() {}
+
+        public var body: some View {
+            LogViewContent(commandClient: environments.commandClient, initialSearchText: environments.logSearchText)
+        }
+    }
+#endif
+
+#if !os(iOS)
 private struct LogViewContent: View {
     @EnvironmentObject private var environments: ExtensionEnvironments
     @StateObject private var viewModel: LogViewModel
@@ -609,4 +655,5 @@ private struct LogContentInnerView: View {
             }
         }
     #endif
+#endif
 #endif

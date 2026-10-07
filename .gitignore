@@ -1,5 +1,7 @@
 /.idea/
 /Libbox.xcframework/
+/XrayMobile.xcframework/
+/HevSocks5Tunnel.xcframework/
 xcuserdata/
 .DS_Store
 /build/

@@ -1,3 +1,9 @@
+// Vestigial sing-box generic Settings screen, only reachable from
+// ApplicationLibrary/Views/NavigationPage.swift (already gated). HushTunnel's
+// own settings are in AccountSettingsSheetView.swift. References CoreView
+// and RemoteControlView, which can no longer be linked into the iOS build at
+// all (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Library
 import SwiftUI
 
@@ -254,3 +260,4 @@ public struct SettingView: View {
         }
     #endif
 }
+#endif

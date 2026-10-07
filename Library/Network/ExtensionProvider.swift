@@ -1,13 +1,19 @@
-import Foundation
-import Libbox
-import NetworkExtension
-import os.log
-#if os(iOS)
-    import WidgetKit
-#endif
-#if os(macOS)
-    import CoreLocation
-#endif
+// iOS no longer uses this class at all — the `Extension` target's real entry
+// point is `Extension/PacketTunnelProvider.swift`, which subclasses
+// `NEPacketTunnelProvider` directly (xray-core + hev-socks5-tunnel) rather
+// than this sing-box/Libbox-based base class. Only `SystemExtension`
+// (macOS) and `TVExtension` (tvOS) still subclass `ExtensionProvider`.
+// Gating the whole file is safe (verified: nothing with iOS target
+// membership references `ExtensionProvider` anymore) and necessary — Libbox
+// can no longer be linked into the iOS build at all (see HTTPClient.swift).
+#if !os(iOS)
+    import Foundation
+    import Libbox
+    import NetworkExtension
+    import os.log
+    #if os(macOS)
+        import CoreLocation
+    #endif
 
 open class ExtensionProvider: NEPacketTunnelProvider {
     private static let logger = Logger(category: "ExtensionProvider")
@@ -333,3 +339,4 @@ open class ExtensionProvider: NEPacketTunnelProvider {
         }
     }
 }
+#endif

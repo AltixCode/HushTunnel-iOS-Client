@@ -1,3 +1,9 @@
+// Vestigial sing-box dashboard profile-sharing UI, only reachable from
+// ApplicationLibrary/Views/Dashboard/Cards/ProfilePickerSheet.swift (already
+// gated). Relies on Profile's Transferable/generateShareFileAsync support
+// (Library/Database/Profile+Transferable.swift), which can no longer be
+// linked into the iOS build at all (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Foundation
 import Library
 import SwiftUI
@@ -157,4 +163,5 @@ public struct ShareButtonCompat<Label: View>: View {
         }
     }
 
+#endif
 #endif

@@ -1,3 +1,5 @@
+// Vestigial sing-box template UI, unreachable from HushTunnel's real navigation (ApplicationLibrary/HushTunnel/Views/RootView.swift only ever shows AuthView/ResellerHomeView/UserHomeView/VpnDisclosureView). Libbox can no longer be linked into the iOS build (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 #if canImport(GhosttyTerminal)
     import Combine
     import Foundation
@@ -333,4 +335,5 @@
     private final class TerminalRelay: @unchecked Sendable {
         weak var viewModel: TerminalWrapperViewModel?
     }
+#endif
 #endif
