@@ -37,10 +37,23 @@ public enum ProvisionHelper {
     public static func provisionSubscription(
         subscriptionUrl: String,
         preferredServerId: String? = nil,
+        preferredServerHost: String? = nil,
         reloadRunningProfile: Bool = true
     ) async throws {
         #if os(iOS)
-            var baseRemoteURL = URL(string: subscriptionUrl)
+            // Explicit, not inferred: the backend's format auto-detection
+            // (lib/subscription-format.ts) falls back to sniffing "sing-box"
+            // out of the request's User-Agent when no `?format=` is given —
+            // and `Library/Network/HTTPClient.swift` wraps Libbox's Go HTTP
+            // client, which does not actually honor
+            // `request.setUserAgent(...)` the way `HTTPClient.userAgent`
+            // assumes (confirmed: even after making that string iOS-aware,
+            // the backend kept receiving a sing-box-matching UA and serving
+            // the JSON config format instead of plain links). Any value
+            // other than "json"/"sing-box" selects the base64 branch
+            // unconditionally — using that instead of fighting Libbox's HTTP
+            // stack.
+            var baseRemoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "base64")
         #else
             var baseRemoteURL = URL(string: subscriptionUrl)?.appendingQueryItem(name: "format", value: "sing-box")
         #endif
@@ -55,18 +68,24 @@ public enum ProvisionHelper {
         // changing the managed profile's URL. Otherwise a failed refresh can
         // leave the UI pointing at one server while the config file still
         // contains the previously selected server.
-        let remoteContent = try await HTTPClient.getStringAsync(remoteURL.absoluteString)
+        let rawContent = try await HTTPClient.getStringAsync(remoteURL.absoluteString)
+        let contentToStore: String
         #if os(iOS)
-            let trimmed = remoteContent.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.hasPrefix("vless://"), URL(string: trimmed) != nil else {
-                throw NSError(domain: "ProvisionHelper", code: 0, userInfo: [
-                    NSLocalizedDescriptionKey: "Subscription did not return a valid vless:// link",
-                ])
-            }
+            // The backend's default subscription format follows the standard
+            // v2ray-ecosystem convention: the body is base64 (not a literal
+            // "vless://..." string) decoding to one or more newline-separated
+            // share links — the same format HushTunnel's Android client (a
+            // v2rayNG fork) already consumes, and (unlike the sing-box/json
+            // format, which does respect `?server=`) it is NOT pre-filtered
+            // to the requested server — it always lists every active server.
+            // Match client-side by host, the same way the Android client's
+            // own `ProvisionHelper.selectServerByNode` does.
+            contentToStore = try Self.extractVlessLink(from: rawContent, preferredHost: preferredServerHost)
         #else
+            contentToStore = rawContent
             try await BlockingIO.run {
                 var error: NSError?
-                LibboxCheckConfig(remoteContent, &error)
+                LibboxCheckConfig(contentToStore, &error)
                 if let error {
                     throw error
                 }
@@ -77,7 +96,7 @@ public enum ProvisionHelper {
             existing.remoteURL = remoteURL.absoluteString
             try await ProfileManager.update(existing)
             try await existing.updateRemoteProfile(
-                content: remoteContent,
+                content: contentToStore,
                 reloadIfSelected: reloadRunningProfile
             )
             await SharedPreferences.selectedProfileID.set(existing.mustID)
@@ -90,7 +109,7 @@ public enum ProvisionHelper {
         let profileConfig = profileConfigDirectory.appendingPathComponent("config_\(nextProfileID).json")
         try await BlockingIO.run {
             try FileManager.default.createDirectory(at: profileConfigDirectory, withIntermediateDirectories: true)
-            try remoteContent.write(to: profileConfig, atomically: true, encoding: .utf8)
+            try contentToStore.write(to: profileConfig, atomically: true, encoding: .utf8)
         }
 
         let profile = Profile(
@@ -106,6 +125,68 @@ public enum ProvisionHelper {
         await SharedPreferences.selectedProfileID.set(profile.mustID)
         ServerSelectionStore.selectedServerID = preferredServerId
     }
+
+    #if os(iOS)
+        /// Extracts a single `vless://` share link from a subscription body.
+        /// Handles both representations the backend may return:
+        ///   - base64: the whole body is base64 (standard-or-URL-safe,
+        ///     optionally unpadded), decoding to one or more newline-separated
+        ///     share links — this format lists *every* active server (it does
+        ///     not filter by `?server=` the way the sing-box/json format
+        ///     does), so `preferredHost` is used to pick the right one.
+        ///   - plain: the body is already a bare `vless://...` link.
+        /// Throws if neither interpretation yields any valid link.
+        static func extractVlessLink(from rawContent: String, preferredHost: String?) throws -> String {
+            let trimmed = rawContent.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            func vlessLines(in text: String) -> [String] {
+                text
+                    .split(whereSeparator: \.isNewline)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { $0.hasPrefix("vless://") }
+            }
+
+            let candidates: [String]
+            if !vlessLines(in: trimmed).isEmpty {
+                candidates = vlessLines(in: trimmed)
+            } else if let decoded = Self.base64Decode(trimmed) {
+                candidates = vlessLines(in: decoded)
+            } else {
+                candidates = []
+            }
+
+            guard !candidates.isEmpty else {
+                let preview = String(trimmed.prefix(80))
+                throw NSError(domain: "ProvisionHelper", code: 0, userInfo: [
+                    NSLocalizedDescriptionKey: "Subscription did not return a valid vless:// link (got \(trimmed.count) chars, starting: \(preview))",
+                ])
+            }
+
+            if let preferredHost, !preferredHost.isEmpty {
+                if let match = candidates.first(where: { URL(string: $0)?.host?.caseInsensitiveCompare(preferredHost) == .orderedSame }) {
+                    return match
+                }
+            }
+
+            return candidates[0]
+        }
+
+        /// Decodes standard or URL-safe base64, with or without padding —
+        /// subscription services are inconsistent about which variant they
+        /// emit, and `Data(base64Encoded:)` alone only accepts padded
+        /// standard base64.
+        private static func base64Decode(_ string: String) -> String? {
+            var normalized = string
+                .replacingOccurrences(of: "-", with: "+")
+                .replacingOccurrences(of: "_", with: "/")
+            let remainder = normalized.count % 4
+            if remainder > 0 {
+                normalized += String(repeating: "=", count: 4 - remainder)
+            }
+            guard let data = Data(base64Encoded: normalized) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+    #endif
 }
 
 /// Persists the server that was successfully written to the managed profile.

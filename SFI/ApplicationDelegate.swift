@@ -1,7 +1,9 @@
 import ApplicationLibrary
 import FileProvider
 import Foundation
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 import Library
 import Network
 import UIKit
@@ -11,9 +13,17 @@ class ApplicationDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCe
     private var reportTransferServer: ReportTransferServer?
 
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        LibboxPrepareCrashSignalHandlers()
+        // Libbox's own crash-signal handlers are a sing-box feature; iOS no
+        // longer runs sing-box/Libbox at all (see
+        // Library/Network/HTTPClient.swift), so only NativeCrashReporter's
+        // own signal handling applies here.
+        #if !os(iOS)
+            LibboxPrepareCrashSignalHandlers()
+        #endif
         NativeCrashReporter.installForCurrentProcess()
-        LibboxReinstallCrashSignalHandlers()
+        #if !os(iOS)
+            LibboxReinstallCrashSignalHandlers()
+        #endif
         NSLog("Here I stand")
         do {
             try ServiceSetup.apply(crashReportSource: "Application")

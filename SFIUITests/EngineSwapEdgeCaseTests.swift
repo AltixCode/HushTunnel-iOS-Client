@@ -34,8 +34,8 @@ final class EngineSwapEdgeCaseTests: XCTestCase {
         }
 
         let connectButton = app.buttons["hush.connect-toggle"]
-        if !connectButton.waitForExistence(timeout: 5), app.tabBars.buttons.count > 0 {
-            app.tabBars.buttons.element(boundBy: 0).tap()
+        if !connectButton.waitForExistence(timeout: 5) {
+            app.ensureVpnTabVisible()
         }
         guard connectButton.waitForExistence(timeout: 5) else {
             throw XCTSkip("An authenticated account with an active subscription is required")
@@ -122,6 +122,9 @@ final class EngineSwapEdgeCaseTests: XCTestCase {
         relaunched.launch()
 
         let connectButton = relaunched.buttons["hush.connect-toggle"]
+        if !connectButton.waitForExistence(timeout: 5) {
+            relaunched.ensureVpnTabVisible()
+        }
         _ = connectButton.waitForExistence(timeout: 10)
 
         XCTAssertTrue(waitForStatus(relaunched, "connected", timeout: 15), "Expected status to read 'connected' on relaunch — the NetworkExtension tunnel should have kept running independently of the killed host app")

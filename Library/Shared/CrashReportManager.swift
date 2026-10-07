@@ -1,6 +1,8 @@
 import CrashReporter
 import Foundation
-import Libbox
+#if !os(iOS)
+    import Libbox
+#endif
 import os
 import SwiftUI
 
@@ -506,6 +508,18 @@ enum CrashReportMetadataBuilder {
         let appBundle = containingAppBundle(for: processBundle) ?? currentAppBundle()
         let parsedDetails = parseCrashDetails(from: content)
 
+        // iOS no longer runs sing-box/Libbox (see HTTPClient.swift for why it
+        // can't be linked into the iOS build at all), so there's no engine
+        // version to fall back to here beyond whatever the crash metadata
+        // itself already carried.
+        #if os(iOS)
+            let coreVersion = metadata.coreVersion
+            let goVersion = metadata.goVersion
+        #else
+            let coreVersion = firstNonEmpty(metadata.coreVersion, normalizedString(LibboxVersion()))
+            let goVersion = firstNonEmpty(metadata.goVersion, normalizedString(LibboxGoVersion()))
+        #endif
+
         return CrashReportMetadata(
             source: metadata.source,
             bundleIdentifier: bundleIdentifier,
@@ -519,8 +533,8 @@ enum CrashReportMetadataBuilder {
             startedAt: normalizedString(metadata.startedAt),
             appVersion: firstNonEmpty(bundleBuildVersion(appBundle), metadata.appVersion),
             appMarketingVersion: firstNonEmpty(bundleMarketingVersion(appBundle), metadata.appMarketingVersion),
-            coreVersion: firstNonEmpty(metadata.coreVersion, normalizedString(LibboxVersion())),
-            goVersion: firstNonEmpty(metadata.goVersion, normalizedString(LibboxGoVersion())),
+            coreVersion: coreVersion,
+            goVersion: goVersion,
             crashedAt: normalizedString(metadata.crashedAt),
             signalName: firstNonEmpty(metadata.signalName, parsedDetails.signalName),
             signalCode: firstNonEmpty(metadata.signalCode, parsedDetails.signalCode),

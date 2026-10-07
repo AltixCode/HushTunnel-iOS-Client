@@ -259,13 +259,13 @@ public struct ConnectStatusLabel: View {
     private var rawStatusValue: String {
         if isProvisioning { return "provisioning" }
         switch profile.status {
-        case .connected: "connected"
-        case .connecting: "connecting"
-        case .reasserting: "reasserting"
-        case .disconnecting: "disconnecting"
-        case .disconnected: "disconnected"
-        case .invalid: "invalid"
-        @unknown default: "unknown"
+        case .connected: return "connected"
+        case .connecting: return "connecting"
+        case .reasserting: return "reasserting"
+        case .disconnecting: return "disconnecting"
+        case .disconnected: return "disconnected"
+        case .invalid: return "invalid"
+        @unknown default: return "unknown"
         }
     }
 }

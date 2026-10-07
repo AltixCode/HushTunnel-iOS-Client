@@ -1,3 +1,7 @@
+// Vestigial sing-box dashboard sheet wrappers, unreferenced anywhere else in
+// the codebase. GroupListView/ConnectionListView can no longer be linked
+// into the iOS build at all (see Library/Network/HTTPClient.swift).
+#if !os(iOS)
 import Library
 import SwiftUI
 
@@ -46,3 +50,4 @@ public struct ConnectionsSheetContent: View {
         }
     }
 }
+#endif

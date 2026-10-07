@@ -383,7 +383,8 @@ public struct UserHomeView: View {
         }
         try await ProvisionHelper.provisionSubscription(
             subscriptionUrl: activeSub.subscriptionUrl,
-            preferredServerId: currentDisplayServer.id
+            preferredServerId: currentDisplayServer.id,
+            preferredServerHost: currentDisplayServer.host
         )
     }
 
@@ -398,6 +399,7 @@ public struct UserHomeView: View {
                     try await ProvisionHelper.provisionSubscription(
                         subscriptionUrl: activeSub.subscriptionUrl,
                         preferredServerId: newServer.id,
+                        preferredServerHost: newServer.host,
                         reloadRunningProfile: false
                     )
                     await environments.reload()
@@ -441,9 +443,11 @@ public struct UserHomeView: View {
                         guard let serverID = await MainActor.run(body: { self.selectedServer?.id }) else {
                             throw NSError(domain: "HushTunnel", code: 2, userInfo: [NSLocalizedDescriptionKey: lang.tr("vpn.noServer")])
                         }
+                        let serverHost = await MainActor.run { self.selectedServer?.host }
                         try await ProvisionHelper.provisionSubscription(
                             subscriptionUrl: activeSub.subscriptionUrl,
-                            preferredServerId: serverID
+                            preferredServerId: serverID,
+                            preferredServerHost: serverHost
                         )
                         await environments.reload()
                         await MainActor.run {

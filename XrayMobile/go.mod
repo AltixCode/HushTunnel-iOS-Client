@@ -2,7 +2,7 @@ module github.com/altixcode/hushtunnel-xraymobile
 
 go 1.27
 
-require github.com/xtls/xray-core v1.260327.1-0.20260930074004-b26a91de4f32
+require github.com/xtls/xray-core v1.260327.1-0.20260908222543-52a412d9e2f5
 
 require (
 	github.com/andybalholm/brotli v1.0.6 // indirect
@@ -32,6 +32,8 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/refraction-networking/utls v1.8.3-0.20260301010127-aa6edf4b11af // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/sagernet/sing v0.5.1 // indirect
+	github.com/sagernet/sing-shadowsocks v0.2.7 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect

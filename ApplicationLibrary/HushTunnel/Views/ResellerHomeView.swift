@@ -85,6 +85,7 @@ public struct ResellerHomeView: View {
                 )
                 .tabItem {
                     Label(lang.tr("reseller.tab.vpn"), systemImage: "shield.fill")
+                        .accessibilityIdentifier("hush.tab.vpn")
                 }
                 .tag(0)
 
@@ -279,6 +280,7 @@ public struct ResellerHomeView: View {
                                     try await ProvisionHelper.provisionSubscription(
                                         subscriptionUrl: activeSub.subscriptionUrl,
                                         preferredServerId: s.id,
+                                        preferredServerHost: s.host,
                                         reloadRunningProfile: false
                                     )
                                     await environments.reload()
@@ -434,9 +436,11 @@ public struct ResellerHomeView: View {
                     guard let serverID = await MainActor.run(body: { self.selectedServer?.id }) else {
                         throw NSError(domain: "HushTunnel", code: 2, userInfo: [NSLocalizedDescriptionKey: lang.tr("vpn.noServer")])
                     }
+                    let serverHost = await MainActor.run { self.selectedServer?.host }
                     try await ProvisionHelper.provisionSubscription(
                         subscriptionUrl: activeSub.subscriptionUrl,
-                        preferredServerId: serverID
+                        preferredServerId: serverID,
+                        preferredServerHost: serverHost
                     )
                     await environments.reload()
                     await MainActor.run {
@@ -463,7 +467,8 @@ public struct ResellerHomeView: View {
         }
         try await ProvisionHelper.provisionSubscription(
             subscriptionUrl: activeSub.subscriptionUrl,
-            preferredServerId: server.id
+            preferredServerId: server.id,
+            preferredServerHost: server.host
         )
     }
 

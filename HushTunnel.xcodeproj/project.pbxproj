@@ -26,7 +26,7 @@
 		3A5F26C82A503D4A00C27EDF /* Library.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC211D2A459B4700A63465 /* Library.framework */; };
 		3A5F26C92A503D4A00C27EDF /* Library.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC211D2A459B4700A63465 /* Library.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3A648D542A4EF4C700D95A12 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AF342B12A4AA520002B34AC /* NetworkExtension.framework */; };
-		3A76504C2A4F08BA003945C5 /* Libbox.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC20DB2A4599D000A63465 /* Libbox.xcframework */; };
+		3A76504C2A4F08BA003945C5 /* Libbox.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC20DB2A4599D000A63465 /* Libbox.xcframework */; platformFilters = (macos, tvos, ); };
 		3A7B322C2FDE1D54008C0F7F /* Library.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3AEC211D2A459B4700A63465 /* Library.framework */; };
 		3A7E90382A46778E00D53052 /* BinaryCodable in Frameworks */ = {isa = PBXBuildFile; productRef = 3A7E90372A46778E00D53052 /* BinaryCodable */; };
 		3A8655142A4FA26600B7181F /* IntentsExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 3A77016D2A4E6B34008F031F /* IntentsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -2349,9 +2349,11 @@
 		3A63137B2F0CEF3D0060A550 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				PROVISIONING_PROFILE_SPECIFIER = "1c32362b-ebdd-4069-bf80-df663660c27c";
 				CURRENT_PROJECT_VERSION = 500;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8Q8Y559285;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0.0;

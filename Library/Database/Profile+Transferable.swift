@@ -1,9 +1,16 @@
-import Foundation
-import Libbox
-import SwiftUI
-import UniformTypeIdentifiers
+// Profile export/import (drag-and-drop, Share Sheet) for sing-box's
+// generic multi-profile model. Only used by the generic dashboard's
+// ProfileCard/ProfilePickerSheet (ApplicationLibrary/Views/Dashboard/Cards),
+// not HushTunnel's own screens (ServerPickerSheetView etc., which manage
+// the one HushTunnel-issued subscription directly). Libbox can no longer be
+// linked into the iOS build at all (see HTTPClient.swift).
+#if !os(iOS)
+    import Foundation
+    import Libbox
+    import SwiftUI
+    import UniformTypeIdentifiers
 
-public extension Profile {
+    public extension Profile {
     func toContent() throws -> LibboxProfileContent {
         let content = LibboxProfileContent()
         content.name = name
@@ -317,4 +324,5 @@ public extension UTType {
             FileWrapper(regularFileWithContents: data)
         }
     }
+    #endif
 #endif

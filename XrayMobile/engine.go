@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,11 +27,63 @@ import (
 	corestats "github.com/xtls/xray-core/features/stats"
 	coreserial "github.com/xtls/xray-core/infra/conf/serial"
 
-	// Registers all of xray-core's built-in inbound/outbound/transport
-	// handlers (vless, freedom, socks, reality TLS, etc.) via side-effect
-	// init(), exactly as xray-core's own main package does.
-	_ "github.com/xtls/xray-core/main/distro/all"
+	// Deliberately NOT `main/distro/all`: that registers every protocol
+	// xray-core supports (HTTP, WebSocket, gRPC, QUIC/masque, mKCP,
+	// Shadowsocks, Trojan, VMess, WireGuard-as-outbound, DNS/fakedns,
+	// geodata, commander, observatory, reverse proxy, etc.) via side-effect
+	// init() — most of which register their own background
+	// workers/listeners/goroutines at init time regardless of whether
+	// anything in this app's config ever uses them. On-device testing
+	// showed the full distro spinning up 22 OS threads and the extension
+	// being SIGABRT-killed externally within ~1s of xray-core starting,
+	// with a healthy, idle Go runtime at the time of the crash (confirmed
+	// via a real device crash report: no panic frame, minimal resident
+	// memory, every Go scheduler thread parked normally) — the signature of
+	// hitting an iOS Network Extension resource ceiling (most likely thread
+	// count, not memory) rather than an application bug. Import only what
+	// `buildConfigJSON` below actually emits: mandatory core features, the
+	// four proxy protocols in use (vless outbound, socks inbound, freedom,
+	// blackhole), and the two transports in use (tcp, reality — tls is also
+	// kept since this file's own Security switch below still emits a
+	// tlsSettings block as an alternative to reality).
+	_ "github.com/xtls/xray-core/app/dispatcher"
+	_ "github.com/xtls/xray-core/app/log"
+	_ "github.com/xtls/xray-core/app/policy"
+	_ "github.com/xtls/xray-core/app/proxyman/inbound"
+	_ "github.com/xtls/xray-core/app/proxyman/outbound"
+	_ "github.com/xtls/xray-core/app/router"
+	_ "github.com/xtls/xray-core/app/stats"
+	_ "github.com/xtls/xray-core/proxy/blackhole"
+	_ "github.com/xtls/xray-core/proxy/freedom"
+	_ "github.com/xtls/xray-core/proxy/socks"
+	_ "github.com/xtls/xray-core/proxy/vless/outbound"
+	_ "github.com/xtls/xray-core/transport/internet/reality"
+	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl" // breaks a dependency cycle in the internet package; xray-core's own distro/all keeps this for the same reason
+	_ "github.com/xtls/xray-core/transport/internet/tcp"
+	_ "github.com/xtls/xray-core/transport/internet/tls"
 )
+
+// iOS Network Extensions (this process) are held to a hard ~50MB memory
+// jetsam limit (confirmed on-device: runningboardd logs "Memory Limits:
+// active 50 inactive 50" for this exact process). The Go runtime has no
+// awareness of that external limit on its own, and with xray-core's full
+// protocol distro loaded, un-tuned Go typically lets its heap balloon well
+// past it before a GC cycle ever runs — the OS then SIGABRTs the whole
+// extension with no application-level crash frame (confirmed on-device via
+// a real crash report: EXC_CRASH/SIGABRT, faulting thread sitting idle in
+// the XPC run loop, ~20 live Go scheduler threads already running — i.e.
+// the engine had started, not a startup-path bug).
+//
+// debug.SetMemoryLimit (Go 1.19+) gives the runtime an actual soft target to
+// collect against, which GOGC tuning alone does not. 35MB leaves headroom
+// under the 50MB hard cap for everything else resident in this process
+// (Swift/Foundation/NetworkExtension overhead, hev-socks5-tunnel's own
+// buffers, XPC). This is a package-level init so it runs before Start() is
+// ever called, matching WireGuard-go's own well-documented fix for the same
+// class of problem on iOS.
+func init() {
+	debug.SetMemoryLimit(35 << 20)
+}
 
 // Engine owns a single xray-core instance. It is safe for concurrent use.
 // gomobile bind exposes this as an opaque reference type to Swift; only the
@@ -66,7 +119,24 @@ func NewEngine() *Engine {
 // internal workers; it does not block for the lifetime of the tunnel (unlike
 // hev_socks5_tunnel_main, which does). Returns a non-nil error, and leaves
 // the Engine in a stopped state, on any failure.
-func (e *Engine) Start(vlessLink string, socksPort int) error {
+func (e *Engine) Start(vlessLink string, socksPort int) (startErr error) {
+	// On-device testing showed this extension's host process being
+	// SIGABRT-killed within ~1s of calling into this function, with zero
+	// Swift-level error surfaced (no "xray-core start failed" ever logged)
+	// and zero application stack frame in the resulting crash report — the
+	// exact signature of an uncaught Go panic. gomobile bind does not
+	// automatically convert a panic into a catchable Swift error; an
+	// unrecovered panic anywhere in core.New/instance.Start takes the whole
+	// host process down with it. Recovering here turns that into a normal
+	// returned error so Swift's existing do/catch (and its own error
+	// logging) actually gets to see what happened, instead of the process
+	// just vanishing.
+	defer func() {
+		if r := recover(); r != nil {
+			startErr = fmt.Errorf("xraymobile: panic in Engine.Start: %v", r)
+		}
+	}()
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
